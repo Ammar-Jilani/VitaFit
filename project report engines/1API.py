@@ -17,6 +17,7 @@ from reportlab.lib.units import inch
 from reportlab.lib import colors
 import io
 import datetime
+from sklearn.preprocessing import LabelEncoder
 
 # --- Load Environment Variables ---
 load_dotenv()
