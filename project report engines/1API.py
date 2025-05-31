@@ -1,13 +1,13 @@
 import os
 import uuid
-from typing import Optional, Literal
+from typing import Optional, Literal, Dict, Any
 from dotenv import load_dotenv
 
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 import pandas as pd
-import numpy as np
+import numpy as np # Keep numpy import
 import joblib
 from pymongo import MongoClient
 from reportlab.lib.pagesizes import letter
@@ -18,20 +18,10 @@ from reportlab.lib import colors
 import io
 import datetime
 
-from Exercisemodel.loader import load_exercise_models
-from dietrecommendationmodel.loader import load_diet_models
-
-# Global variables to hold loaded models
-exercise_clf = None
-exercise_reg = None
-exercise_encoders = None
-
-diet_model = None
-diet_encoders = None
 # --- Load Environment Variables ---
 load_dotenv()
 MONGODB_URI = os.getenv("MONGODB_URI")
-DB_NAME = os.getenv("DB_NAME", "vitafit")
+DB_NAME = os.getenv("DB_NAME", "vitafit") # Default to 'vitafit' if not set
 
 # --- FastAPI App Initialization ---
 app = FastAPI(
@@ -40,52 +30,29 @@ app = FastAPI(
     version="1.0.0"
 )
 
+# --- CORS Middleware ---
 from fastapi.middleware.cors import CORSMiddleware
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Or restrict to your frontend URL like ["http://localhost:3000"]
+    allow_origins=["*"],   # Or restrict to your frontend URL like ["http://localhost:3000"]
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# --- Global Variables for Models and MongoDB Client ---
+mongo_client: Optional[MongoClient] = None
+db = None
 
-# --- MongoDB Client Initialization ---
-mongo_client: Optional[MongoClient] = MongoClient(MONGODB_URI)
-db = mongo_client[DB_NAME]
+# Exercise Model Globals
+multi_clf: Any = None # Exercise Classifier
+multi_reg: Any = None # Exercise Regressor
+label_encoders: Optional[Dict[str, Any]] = None # Encoders for Exercise Model outputs (and gender)
 
-# Test connection
-try:
-    mongo_client.admin.command("ping")
-    print(f"✅ Successfully connected to MongoDB database: {DB_NAME}")
-except Exception as e:
-    print(f"❌ Failed to connect to MongoDB: {e}")
-
-@app.on_event("startup")
-async def startup_db_client():
-    global mongo_client, db
-    try:
-        mongo_client = MongoClient(MONGODB_URI)
-        db = mongo_client[DB_NAME]
-        print(f"Connected to MongoDB database: {DB_NAME}")
-    except Exception as e:
-        print(f"Failed to connect to MongoDB: {e}")
-        # In a real production app, you might want to log this and gracefully handle
-        # if DB connection is critical for app function, you might raise an exception here
-        # or have a health check endpoint.
-
-@app.on_event("shutdown")
-async def shutdown_db_client():
-    if mongo_client:
-        mongo_client.close()
-        print("MongoDB connection closed.")
-
-# --- Global Variables for Models and Encoders ---
-multi_clf = None # Exercise Classifier
-multi_reg = None # Exercise Regressor
-label_encoders = None # Encoders for Exercise Model outputs (and gender for both, assuming commonality)
-diet_label_encoders = None # Encoders specifically for Diet Model's categorical inputs (exercise_type, intensity_level, activity_level)
+# Diet Model Globals
+diet_regressor: Any = None # Diet Model
+diet_label_encoders: Optional[Dict[str, Any]] = None # Encoders specifically for Diet Model's categorical inputs
 
 # Define the exact order of features for each model
 EXERCISE_FEATURE_COLUMNS_ORDER = ["age", "gender", "height", "weight", "bmi", "calories_intake"]
@@ -97,43 +64,112 @@ DIET_FEATURE_COLUMNS_ORDER = [
     "exercise_type", "intensity_level", "frequency_per_week", "activity_level"
 ]
 
-# --- Load Models and Encoders on Startup ---
-@app.on_event("startup")
-async def load_models():
-    global multi_clf, multi_reg, label_encoders, diet_label_encoders
+# --- Helper to convert NumPy types to native Python types ---
+def convert_numpy_types(obj):
+    if isinstance(obj, np.integer):
+        return int(obj)
+    elif isinstance(obj, np.floating):
+        return float(obj)
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, dict):
+        return {k: convert_numpy_types(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_numpy_types(elem) for elem in obj]
+    return obj
 
-    # Load Exercise Models
+
+# --- Startup Events ---
+
+@app.on_event("startup")
+async def startup_all():
+    """
+    Handles all necessary startup procedures:
+    1. Connect to MongoDB.
+    2. Load Machine Learning Models and Encoders.
+    """
+    global mongo_client, db
+    global multi_clf, multi_reg, diet_regressor, label_encoders, diet_label_encoders
+
+    # --- 1. MongoDB Client Initialization ---
     try:
-        exercise_models = load_exercise_models()
-        multi_clf = exercise_models["multi_clf"]
-        multi_reg = exercise_models["multi_reg"]
-        label_encoders = exercise_models["label_encoders"]
-        print("✅ Exercise models and encoders loaded successfully!")
+        mongo_client = MongoClient(MONGODB_URI)
+        db = mongo_client[DB_NAME]
+        mongo_client.admin.command('ismaster')
+        print(f"Connected to MongoDB database: {DB_NAME}")
     except Exception as e:
-        print(f"❌ Failed to load exercise models: {e}")
+        print(f"Failed to connect to MongoDB: {e}")
+        raise HTTPException(status_code=500, detail=f"Server startup error: Failed to connect to MongoDB. {e}")
+
+    # --- 2. Load Models and Encoders ---
+    exercise_models_path = "exercisemodel"
+    try:
+        multi_clf = joblib.load(os.path.join(exercise_models_path, "multi_classifier.pkl"))
+        multi_reg = joblib.load(os.path.join(exercise_models_path, "multi_regressor.pkl"))
+        loaded_encoders = joblib.load(os.path.join(exercise_models_path, "label_encoders.pkl"))
+        if not isinstance(loaded_encoders, dict) or 'gender' not in loaded_encoders:
+            raise ValueError("label_encoders.pkl is not a dictionary or is missing 'gender' encoder.")
+        label_encoders = loaded_encoders # Assign to global only if valid
+        print("Exercise prediction models and encoders loaded successfully!")
+
+        # --- DEBUGGING PRINTS FOR label_encoders ---
+        print(f"DEBUG (startup): label_encoders keys: {list(label_encoders.keys())}")
+        if 'frequency_per_week' in label_encoders:
+            print(f"DEBUG (startup): frequency_per_week LabelEncoder classes: {list(label_encoders['frequency_per_week'].classes_)}")
+        else:
+            print("DEBUG (startup): 'frequency_per_week' not found in label_encoders. THIS IS AN ISSUE IF YOUR MODEL PREDICTS IT CATEGORICALLY.")
+        # --- END DEBUGGING PRINTS ---
+
+    except FileNotFoundError as e:
+        print(f"Error loading exercise models: {e}. Make sure .pkl files are in {exercise_models_path}")
+        raise HTTPException(status_code=500, detail=f"Server setup error: Missing exercise model files. {e}")
+    except Exception as e:
+        print(f"An unexpected error occurred loading exercise models: {e}")
         raise HTTPException(status_code=500, detail=f"Server setup error: Failed to load exercise models. {e}")
 
-    # Load Diet Models
+    # Load Diet Model and its encoders
+    diet_models_path = "dietrecommendationmodel"
     try:
-        diet_models = load_diet_models()
-        diet_label_encoders = diet_models["diet_label_encoders"]
-        print("✅ Diet model and encoders loaded successfully!")
-    except Exception as e:
-        print(f"❌ Failed to load diet model: {e}")
+        diet_regressor = joblib.load(os.path.join(diet_models_path, "diet_model_rf.pkl"))
+        loaded_diet_encoders = joblib.load(os.path.join(diet_models_path, "diet_label_encoders.pkl"))
+        if not isinstance(loaded_diet_encoders, dict) or 'gender' not in loaded_diet_encoders:
+             print("Warning: diet_label_encoders.pkl is not a dictionary or is missing 'gender' encoder for diet model. It might still work if gender is handled differently in diet model.")
+        diet_label_encoders = loaded_diet_encoders
+        print("Diet prediction model and encoders loaded successfully!")
+    except FileNotFoundError as e:
+        print(f"Error loading diet model: {e}. Make sure diet_model_rf.pkl and diet_label_encoders.pkl are in {diet_models_path}")
         diet_regressor = None
         diet_label_encoders = None
+        print("Warning: Diet prediction model will not be available due to missing files.")
+    except Exception as e:
+        print(f"An unexpected error occurred loading diet model: {e}")
+        diet_regressor = None
+        diet_label_encoders = None
+        print(f"Warning: Diet prediction model will not be available due to error: {e}")
 
+@app.on_event("shutdown")
+async def shutdown_db_client():
+    """Closes the MongoDB connection on application shutdown."""
+    if mongo_client:
+        mongo_client.close()
+        print("MongoDB connection closed.")
 
 # --- Pydantic Models for Request Body Validation ---
 class UserInput(BaseModel):
     session_id: str = Field(..., description="Unique session ID from frontend to track user's predictions.")
     age: int = Field(..., gt=0, lt=120, description="User's age in years.")
-    gender: Literal["Male", "Female", "Other"] = Field(..., description="User's gender.")
+    gender: Literal["male", "female"] = Field(..., description="User's gender.")
     height_value: float = Field(..., gt=0, description="User's height value.")
     height_unit: Literal["cm", "inches", "feet"] = Field(..., description="Unit of height.")
     weight_value: float = Field(..., gt=0, description="User's weight value.")
     weight_unit: Literal["kg", "lbs"] = Field(..., description="Unit of weight.")
     calories_intake: int = Field(..., gt=0, description="User's daily calorie intake.")
+
+    # Optional fields for diet plan (can be submitted later)
+    medical_conditions: Optional[str] = Field(None, description="Any medical conditions (e.g., diabetes, hypertension).")
+    dietary_restrictions: Optional[str] = Field(None, description="Any dietary restrictions (e.g., vegetarian, vegan, allergies).")
+    food_preferences: Optional[str] = Field(None, description="Preferred foods or dislikes.")
+
 
 class UserPersonalDetails(BaseModel):
     first_name: Optional[str] = None
@@ -145,17 +181,23 @@ class ReportRequest(BaseModel):
     session_id: str = Field(..., description="Session ID to retrieve stored predictions.")
     user_details: Optional[UserPersonalDetails] = None
 
+class DietPlanRequest(BaseModel):
+    session_id: str = Field(..., description="Session ID to retrieve previous exercise predictions and user data.")
+    medical_conditions: Optional[str] = Field(None, description="Any medical conditions (e.g., diabetes, hypertension).")
+    dietary_restrictions: Optional[str] = Field(None, description="Any dietary restrictions (e.g., vegetarian, vegan, allergies).")
+    food_preferences: Optional[str] = Field(None, description="Preferred foods or dislikes.")
 
-# --- Helper Functions (From your provided data generation logic) ---
 
-def infer_activity_level(freq, intensity):
+# --- Helper Functions ---
+
+def infer_activity_level(freq: int, intensity: str) -> str:
     """
-    Infers activity level based on exercise frequency and intensity.
+    Infres activity level based on exercise frequency and intensity.
     This logic must match the data generation logic used for training the diet model.
     """
-    if freq >= 5 and intensity == "high":
+    if freq >= 5 and intensity.lower() == "high":
         return "very active"
-    elif freq >= 3 and intensity in ["medium", "high"]: # Used "medium" as per your dataset generation snippet
+    elif freq >= 3 and intensity.lower() in ["medium", "high"]:
         return "moderate"
     elif freq <= 2:
         return "light"
@@ -165,9 +207,9 @@ def infer_activity_level(freq, intensity):
 def preprocess_user_data_for_exercise(data: UserInput, encoders: dict) -> tuple[pd.DataFrame, dict]:
     """
     Preprocesses raw user input into a DataFrame suitable for the exercise models.
+    Handles unit conversions, BMI calculation, and categorical encoding for gender.
     Returns the DataFrame and a dictionary of processed core features for later use.
     """
-    # Unit Conversions
     height_in_inches = data.height_value
     if data.height_unit.lower() == 'cm':
         height_in_inches = data.height_value * 0.393701
@@ -178,31 +220,30 @@ def preprocess_user_data_for_exercise(data: UserInput, encoders: dict) -> tuple[
     if data.weight_unit.lower() == 'lbs':
         weight_in_kg = data.weight_value * 0.453592
 
-    # BMI Calculation (BMI = weight (kg) / (height (m))^2)
-    # Need height in meters for BMI calculation, convert inches to meters
     height_in_meters = height_in_inches * 0.0254
     bmi = weight_in_kg / (height_in_meters ** 2) if height_in_meters > 0 else 0.0
 
-    # Gender Encoding (using the encoder from label_encoders for consistency with exercise model)
+    if encoders is None or 'gender' not in encoders:
+        raise HTTPException(status_code=500, detail="Gender LabelEncoder not loaded or missing from 'label_encoders'.")
+    
     gender_le = encoders.get('gender')
     if not gender_le:
-        raise HTTPException(status_code=500, detail="Gender LabelEncoder not loaded for exercise model.")
+        raise HTTPException(status_code=500, detail="Gender LabelEncoder found None in 'label_encoders'.")
+    
     try:
-        encoded_gender = gender_le.transform([data.gender])[0]
+        encoded_gender = gender_le.transform([data.gender.lower()])[0]
     except ValueError:
         raise HTTPException(status_code=400, detail=f"Invalid gender value: '{data.gender}'. Must be one of: {list(gender_le.classes_)}")
 
-    # Prepare core processed data
     processed_core_features = {
         "age": data.age,
         "gender": encoded_gender,
-        "height": height_in_inches, # Model expects height in inches
-        "weight": weight_in_kg,     # Model expects weight in kg
+        "height": height_in_inches,
+        "weight": weight_in_kg,
         "bmi": bmi,
         "calories_intake": data.calories_intake
     }
 
-    # Create DataFrame, ensuring correct column order for exercise model
     df_for_exercise_model = pd.DataFrame([processed_core_features])[EXERCISE_FEATURE_COLUMNS_ORDER]
 
     return df_for_exercise_model, processed_core_features
@@ -213,161 +254,230 @@ def preprocess_user_data_for_exercise(data: UserInput, encoders: dict) -> tuple[
 async def read_root():
     return {"message": "Welcome to the Fitness and Diet Prediction API!"}
 
-@app.post("/predict")
-async def predict_fitness_plan(user_input: UserInput):
+@app.post("/predict_exercise") # Renamed endpoint
+async def predict_exercise_plan(user_input: UserInput):
     # Ensure exercise models are loaded
     if not all([multi_clf, multi_reg, label_encoders]):
-        raise HTTPException(status_code=500, detail="Exercise models are not loaded. Server might be misconfigured.")
+        raise HTTPException(status_code=500, detail="Exercise models or encoders are not loaded. Server might be misconfigured.")
 
     # --- 1. Preprocess User Input for Exercise Model ---
-    df_for_exercise, processed_core_features = preprocess_user_data_for_exercise(user_input, label_encoders)
+    df_for_exercise, processed_core_features = preprocess_user_data_for_exercise(user_input, label_encoders) # type: ignore
 
     # --- 2. Exercise Predictions ---
     exercise_predictions = {}
     try:
-        y_class_pred_encoded = multi_clf.predict(df_for_exercise)
-        y_reg_pred = multi_reg.predict(df_for_exercise)
+        y_class_pred_encoded = multi_clf.predict(df_for_exercise) # type: ignore
+        y_reg_pred = multi_reg.predict(df_for_exercise) # type: ignore
 
-        # Decode exercise classification results back to original strings
-        predicted_exercise_type = label_encoders['exercise_type'].inverse_transform([y_class_pred_encoded[0, 0]])[0]
-        predicted_intensity_level = label_encoders['intensity_level'].inverse_transform([y_class_pred_encoded[0, 1]])[0]
-        predicted_frequency_per_week_val = label_encoders['frequency_per_week'].inverse_transform([y_class_pred_encoded[0, 2]])[0]
+        # --- DEBUGGING PRINTS FOR MODEL OUTPUT ---
+        print(f"DEBUG (predict_exercise): Raw y_class_pred_encoded: {y_class_pred_encoded}")
+        # The multi_clf output needs to be carefully mapped to your expected outputs.
+        # Based on your CSV example: 'exercise_type', 'intensity_level', 'frequency_per_week'
+        # So y_class_pred_encoded[0, 0] is exercise_type, [0, 1] is intensity_level, [0, 2] is frequency_per_week
+        if y_class_pred_encoded.shape[1] > 2: # Ensure index 2 exists
+            print(f"DEBUG (predict_exercise): Raw encoded frequency_per_week: {y_class_pred_encoded[0, 2]}")
+        else:
+            print("DEBUG (predict_exercise): y_class_pred_encoded has less than 3 columns. Cannot get frequency_per_week.")
+        # --- END DEBUGGING PRINTS ---
+
+        predicted_exercise_type = label_encoders['exercise_type'].inverse_transform([y_class_pred_encoded[0, 0]])[0] # type: ignore
+        predicted_intensity_level = label_encoders['intensity_level'].inverse_transform([y_class_pred_encoded[0, 1]])[0] # type: ignore
         
-        # Ensure frequency is an integer if it represents counts
-        predicted_frequency_per_week_int = int(predicted_frequency_per_week_val)
-
+        # Handle frequency_per_week: If encoder is missing, use raw predicted value as integer,
+        # otherwise decode it.
+        predicted_frequency_per_week_val = None
+        if 'frequency_per_week' in label_encoders and label_encoders['frequency_per_week'] is not None:
+            # Check if the predicted value is within the encoder's known classes
+            predicted_encoded_freq = y_class_pred_encoded[0, 2]
+            if predicted_encoded_freq in label_encoders['frequency_per_week'].classes_: # This is an incorrect check, classes_ holds original labels not encoded values.
+                 # The correct check would be if the predicted_encoded_freq is an index within the length of classes_
+                predicted_frequency_per_week_val = label_encoders['frequency_per_week'].inverse_transform([predicted_encoded_freq])[0] # type: ignore
+                print(f"DEBUG: Decoded frequency_per_week using encoder: {predicted_frequency_per_week_val}")
+            else:
+                # If the predicted encoded value is not in the encoder's known *encoded values*, this means the model predicted something unexpected.
+                # In most sklearn LabelEncoder cases, classes_ are the original labels, and inverse_transform takes encoded integers.
+                # The issue is typically if the predicted_encoded_freq is out of bounds for the inverse_transform.
+                print(f"WARNING: Predicted encoded frequency '{predicted_encoded_freq}' not found in LabelEncoder's classes for 'frequency_per_week'.")
+                # Fallback to direct conversion if we *assume* the model predicts directly the number
+                predicted_frequency_per_week_val = int(predicted_encoded_freq) if isinstance(predicted_encoded_freq, (int, np.integer)) else -1
+        else:
+            print("WARNING: 'frequency_per_week' LabelEncoder is missing. Attempting to use raw predicted value as integer.")
+            # Assume y_class_pred_encoded[0, 2] is directly the integer frequency if no encoder is found
+            try:
+                predicted_frequency_per_week_val = int(y_class_pred_encoded[0, 2])
+            except (IndexError, TypeError, ValueError):
+                predicted_frequency_per_week_val = -1 # Default to -1 if prediction is not a valid integer or not present
 
         exercise_predictions = {
             "exercise_type": predicted_exercise_type,
             "intensity_level": predicted_intensity_level,
-            "frequency_per_week": predicted_frequency_per_week_int,
+            "frequency_per_week": predicted_frequency_per_week_val, # Now should be an integer or -1
             "duration_minutes": round(y_reg_pred[0, 0], 2),
             "estimated_calorie_burn": round(y_reg_pred[0, 1], 2)
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error during exercise prediction: {str(e)}")
 
-    # --- 3. Diet Predictions (if model is loaded) ---
-    diet_predictions = {}
-    if diet_regressor and diet_label_encoders: # Ensure diet model and its encoders are loaded
-        try:
-            # Infer activity level based on exercise predictions
-            activity_level = infer_activity_level(
-                exercise_predictions["frequency_per_week"],
-                exercise_predictions["intensity_level"]
-            )
-            
-            # Encode categorical inputs for the diet model using diet_label_encoders
-            # IMPORTANT: Ensure your diet_label_encoders.pkl contains encoders for these specific categories.
-            # Use 'gender' encoder from diet_label_encoders if its classes differ from exercise_label_encoders for diet model.
-            # If `gender` encoder is identical for both models, `processed_core_features["gender"]` is already encoded.
-            
-            # Re-encode gender specifically for diet model if diet_label_encoders['gender'] exists and is used
-            # Otherwise, use processed_core_features["gender"] which is already encoded by label_encoders['gender']
-            diet_encoded_gender = processed_core_features["gender"] # Assuming gender encoding is consistent
-
-            # Check if diet_label_encoders has an explicit 'gender' encoder and use it if needed for diet model
-            if 'gender' in diet_label_encoders and diet_label_encoders['gender'].classes_.tolist() != label_encoders['gender'].classes_.tolist():
-                 # This block would re-encode gender if the diet model's gender encoder has different classes/mapping
-                 try:
-                     diet_encoded_gender = diet_label_encoders['gender'].transform([user_input.gender])[0]
-                 except ValueError:
-                     raise HTTPException(status_code=400, detail=f"Invalid gender for diet model: '{user_input.gender}'. Must be one of: {list(diet_label_encoders['gender'].classes_)}")
-
-
-            encoded_exercise_type = diet_label_encoders['exercise_type'].transform([exercise_predictions["exercise_type"]])[0]
-            encoded_intensity_level = diet_label_encoders['intensity_level'].transform([exercise_predictions["intensity_level"]])[0]
-            # 'frequency_per_week' is NOT encoded for the diet model; it's used as a direct numerical input.
-            encoded_activity_level = diet_label_encoders['activity_level'].transform([activity_level])[0]
-
-            # Combine core processed features with exercise outputs and derived activity_level for diet model input
-            diet_model_input_data = {
-                "age": processed_core_features["age"],
-                "gender": diet_encoded_gender, # Use possibly re-encoded gender
-                "height": processed_core_features["height"],
-                "weight": processed_core_features["weight"],
-                "bmi": processed_core_features["bmi"],
-                "calories_intake": processed_core_features["calories_intake"],
-                "exercise_type": encoded_exercise_type,
-                "intensity_level": encoded_intensity_level,
-                "frequency_per_week": exercise_predictions["frequency_per_week"], # DIRECT numerical value, NOT encoded
-                "activity_level": encoded_activity_level
-            }
-            
-            # Create DataFrame for diet model, ensuring correct column order
-            df_for_diet_model = pd.DataFrame([diet_model_input_data])[DIET_FEATURE_COLUMNS_ORDER]
-
-            # Make diet predictions
-            y_diet_pred = diet_regressor.predict(df_for_diet_model)
-            diet_predictions = {
-                "recommended_calories": round(y_diet_pred[0, 0], 2),
-                "protein_grams_per_day": round(y_diet_pred[0, 1], 2),
-                "carbs_grams_per_day": round(y_diet_pred[0, 2], 2),
-                "fats_grams_per_day": round(y_diet_pred[0, 3], 2)
-            }
-        except Exception as e:
-            print(f"Warning: Error during diet prediction: {str(e)}")
-            diet_predictions = {"error": f"Could not generate diet plan due to internal error: {str(e)}"}
-    else:
-        diet_predictions = {"message": "Diet prediction model not available or not loaded."}
-
-
-    # --- 4. Store Predictions in MongoDB (for report generation) ---
-    if db:
+    # --- 3. Store Predictions in MongoDB ---
+    if db is not None:
         try:
             prediction_record = {
                 "session_id": user_input.session_id,
                 "timestamp": datetime.datetime.utcnow(),
-                "raw_user_input": user_input.dict(), # Store raw input from frontend
-                "processed_features": processed_core_features, # Store core processed features (from exercise preprocessing)
-                "exercise_predictions": exercise_predictions,
-                "diet_predictions": diet_predictions # Store diet predictions as well
+                "raw_user_input": convert_numpy_types(user_input.dict()), # Convert NumPy types
+                "processed_features": convert_numpy_types(processed_core_features), # Convert NumPy types
+                "exercise_predictions": convert_numpy_types(exercise_predictions), # Convert NumPy types
+                "diet_predictions": {} # Initialize empty, will be filled by /predict_diet
             }
-            # Upsert: update if session_id exists, insert otherwise
             db.predictions.update_one(
                 {"session_id": user_input.session_id},
                 {"$set": prediction_record},
                 upsert=True
             )
-            print(f"Predictions for session {user_input.session_id} stored/updated in MongoDB.")
+            print(f"Exercise predictions for session {user_input.session_id} stored/updated in MongoDB.")
         except Exception as e:
-            print(f"Error storing predictions in MongoDB: {e}")
-            # Do not block the API response if DB storage fails
+            print(f"Error storing exercise predictions in MongoDB: {e}")
+            print(f"Invalid document: {prediction_record}") # Print the problematic document
     else:
-        print("MongoDB client not initialized. Predictions not stored.")
+        print("MongoDB client not initialized. Exercise predictions not stored.")
 
-
-    # --- 5. Return Combined Predictions ---
+    # --- 4. Return Exercise Predictions ---
     return {
         "session_id": user_input.session_id,
-        "exercise_plan": exercise_predictions,
-        "diet_plan": diet_predictions
+        "exercise_plan": convert_numpy_types(exercise_predictions), # Ensure return type is native
+        "message": "Exercise plan generated. You can now generate a diet plan with more details if desired."
     }
+
+@app.post("/predict_diet")
+async def predict_diet_plan(diet_request: DietPlanRequest):
+    if not all([diet_regressor, diet_label_encoders]):
+        raise HTTPException(status_code=500, detail="Diet prediction models or encoders are not loaded. Server might be misconfigured.")
+    
+    if db is None:
+        raise HTTPException(status_code=500, detail="MongoDB client not initialized. Cannot generate diet plan.")
+
+    # Retrieve existing predictions for the session
+    prediction_record = db.predictions.find_one({"session_id": diet_request.session_id})
+
+    if not prediction_record:
+        raise HTTPException(status_code=404, detail=f"No exercise predictions found for session ID: {diet_request.session_id}. Please submit initial user data first.")
+
+    # Extract stored data (which should now be native Python types)
+    processed_core_features = prediction_record.get('processed_features', {})
+    exercise_predictions = prediction_record.get('exercise_predictions', {})
+    raw_user_input = prediction_record.get('raw_user_input', {})
+
+    if not processed_core_features or not exercise_predictions:
+        raise HTTPException(status_code=500, detail="Incomplete stored data for session. Cannot generate diet plan.")
+
+    diet_predictions = {}
+    try:
+        # Ensure frequency_per_week is an integer for activity level inference
+        freq_for_activity = int(exercise_predictions.get("frequency_per_week", 0))
+        
+        activity_level = infer_activity_level(
+            freq_for_activity,
+            exercise_predictions["intensity_level"]
+        )
+        
+        # Use the stored (already decoded/native) gender for diet model input
+        # Note: processed_core_features["gender"] should already be an int from previous conversion,
+        # but if the diet model expects the *string* 'male'/'female' for encoding, we need raw_user_input.
+        # Let's assume diet_label_encoders['gender'] encodes 'male'/'female' strings to numbers.
+        diet_gender_raw = raw_user_input['gender'].lower() # Use raw string for encoding
+
+        # Re-encode gender specifically for diet model if diet_label_encoders['gender'] exists
+        if 'gender' in diet_label_encoders and diet_label_encoders['gender'] is not None:
+            try:
+                diet_encoded_gender = diet_label_encoders['gender'].transform([diet_gender_raw])[0]
+            except ValueError:
+                raise HTTPException(status_code=400, detail=f"Invalid gender for diet model: '{diet_gender_raw}'. Must be one of: {list(diet_label_encoders['gender'].classes_)}")
+        else:
+            # Fallback if diet gender encoder is missing (e.g., use the already processed gender, or raise error)
+            # This implies diet model expects numerical gender without needing re-encoding if its encoder is missing
+            print("WARNING: Diet model's 'gender' LabelEncoder is missing. Using pre-processed gender from exercise step.")
+            diet_encoded_gender = processed_core_features["gender"] # This was already an int (0 or 1)
+
+        encoded_exercise_type = diet_label_encoders['exercise_type'].transform([exercise_predictions["exercise_type"]])[0]
+        encoded_intensity_level = diet_label_encoders['intensity_level'].transform([exercise_predictions["intensity_level"]])[0]
+        encoded_activity_level = diet_label_encoders['activity_level'].transform([activity_level])[0]
+
+        diet_model_input_data = {
+            "age": processed_core_features["age"],
+            "gender": diet_encoded_gender, # This should be the encoded integer
+            "height": processed_core_features["height"],
+            "weight": processed_core_features["weight"],
+            "bmi": processed_core_features["bmi"],
+            "calories_intake": processed_core_features["calories_intake"],
+            "exercise_type": encoded_exercise_type,
+            "intensity_level": encoded_intensity_level,
+            "frequency_per_week": freq_for_activity, # This is the integer frequency
+            "activity_level": encoded_activity_level
+        }
+        
+        df_for_diet_model = pd.DataFrame([diet_model_input_data])[DIET_FEATURE_COLUMNS_ORDER]
+
+        y_diet_pred = diet_regressor.predict(df_for_diet_model)
+        diet_predictions = {
+            "recommended_calories": round(y_diet_pred[0, 0], 2),
+            "protein_grams_per_day": round(y_diet_pred[0, 1], 2),
+            "carbs_grams_per_day": round(y_diet_pred[0, 2], 2),
+            "fats_grams_per_day": round(y_diet_pred[0, 3], 2)
+        }
+    except Exception as e:
+        print(f"Warning: Error during diet prediction: {str(e)}")
+        # If diet model isn't fully available/functional, send a specific message to frontend
+        if not diet_regressor or not diet_label_encoders:
+            diet_predictions = {"error": "Diet model not fully loaded or available."}
+        else:
+            raise HTTPException(status_code=500, detail=f"Could not generate diet plan due to internal error: {str(e)}")
+
+    # Update the stored record with diet predictions and any new optional user inputs
+    if db is not None:
+        try:
+            # Update the diet_predictions field
+            db.predictions.update_one(
+                {"session_id": diet_request.session_id},
+                {"$set": {
+                    "diet_predictions": convert_numpy_types(diet_predictions), # Convert NumPy types
+                    "raw_user_input.medical_conditions": diet_request.medical_conditions, # Update optional fields
+                    "raw_user_input.dietary_restrictions": diet_request.dietary_restrictions,
+                    "raw_user_input.food_preferences": diet_request.food_preferences,
+                    "last_updated": datetime.datetime.utcnow() # Add a timestamp for update
+                }}
+            )
+            print(f"Diet predictions for session {diet_request.session_id} updated in MongoDB.")
+        except Exception as e:
+            print(f"Error updating diet predictions in MongoDB: {e}")
+            print(f"Invalid diet document for update: {convert_numpy_types(diet_predictions)}") # Print problematic part
+    else:
+        print("MongoDB client not initialized. Diet predictions not stored.")
+
+    return {
+        "session_id": diet_request.session_id,
+        "diet_plan": convert_numpy_types(diet_predictions), # Ensure return type is native
+        "message": "Diet plan generated successfully!"
+    }
+
 
 @app.post("/generate_report", response_class=StreamingResponse)
 async def generate_report(report_request: ReportRequest):
-    if not db:
+    if db is None:
         raise HTTPException(status_code=500, detail="MongoDB client not initialized. Cannot generate report.")
 
-    # Retrieve predictions from MongoDB
-    # For PyMongo (synchronous), find_one is directly called. For Motor (async), it would be `await db.predictions.find_one`.
-    # Given your current setup, assuming synchronous PyMongo for now.
     prediction_record = db.predictions.find_one({"session_id": report_request.session_id})
 
     if not prediction_record:
         raise HTTPException(status_code=404, detail=f"No predictions found for session ID: {report_request.session_id}")
 
-    # --- PDF Generation Logic ---
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter)
     styles = getSampleStyleSheet()
     elements = []
 
-    # Title
     elements.append(Paragraph("Fitness and Diet Plan Report", styles['h1']))
     elements.append(Spacer(1, 0.2 * inch))
 
-    # User Personal Details
     if report_request.user_details and any(report_request.user_details.dict().values()):
         elements.append(Paragraph("User Details:", styles['h2']))
         user_data = []
@@ -388,11 +498,12 @@ async def generate_report(report_request: ReportRequest):
             elements.append(Table(user_data, style=table_style))
             elements.append(Spacer(1, 0.2 * inch))
 
-    # Raw User Input
     elements.append(Paragraph("Submitted Data:", styles['h2']))
     raw_input_data = []
+    # Include all raw_user_input for the report
     for key, value in prediction_record.get('raw_user_input', {}).items():
-        raw_input_data.append([key.replace('_', ' ').title() + ":", str(value)])
+        if value is not None and value != '': # Exclude None or empty string for cleaner report
+            raw_input_data.append([key.replace('_', ' ').title() + ":", str(value)])
     if raw_input_data:
         elements.append(Table(raw_input_data, style=TableStyle([
             ('GRID', (0,0), (-1,-1), 1, colors.black),
@@ -402,7 +513,6 @@ async def generate_report(report_request: ReportRequest):
         ])))
         elements.append(Spacer(1, 0.2 * inch))
 
-    # Exercise Plan
     elements.append(Paragraph("Exercise Plan:", styles['h2']))
     exercise_data = []
     for key, value in prediction_record.get('exercise_predictions', {}).items():
@@ -416,25 +526,33 @@ async def generate_report(report_request: ReportRequest):
         ])))
         elements.append(Spacer(1, 0.2 * inch))
 
-    # Diet Plan
-    elements.append(Paragraph("Diet Plan:", styles['h2']))
-    diet_data = []
-    for key, value in prediction_record.get('diet_predictions', {}).items():
-        diet_data.append([key.replace('_', ' ').title() + ":", str(value)])
-    if diet_data:
-        elements.append(Table(diet_data, style=TableStyle([
-            ('GRID', (0,0), (-1,-1), 1, colors.black),
-            ('BACKGROUND', (0,0), (-1,-1), colors.lightblue),
-            ('FONTNAME', (0,0), (-1,-1), 'Helvetica'),
-            ('ALIGN', (0,0), (-1,-1), 'LEFT')
-        ])))
+    # Only include Diet Plan if it exists and is not empty
+    diet_predictions_data = prediction_record.get('diet_predictions', {})
+    if diet_predictions_data and not (isinstance(diet_predictions_data, dict) and 'error' in diet_predictions_data):
+        elements.append(Paragraph("Diet Plan:", styles['h2']))
+        diet_data = []
+        for key, value in diet_predictions_data.items():
+            if key != "message": # Don't display message key in the table
+                diet_data.append([key.replace('_', ' ').title() + ":", str(value)])
+        if diet_data:
+            elements.append(Table(diet_data, style=TableStyle([
+                ('GRID', (0,0), (-1,-1), 1, colors.black),
+                ('BACKGROUND', (0,0), (-1,-1), colors.lightblue),
+                ('FONTNAME', (0,0), (-1,-1), 'Helvetica'),
+                ('ALIGN', (0,0), (-1,-1), 'LEFT')
+            ])))
+            elements.append(Spacer(1, 0.2 * inch))
+    elif diet_predictions_data and "error" in diet_predictions_data:
+        elements.append(Paragraph(f"Diet Plan Error: {diet_predictions_data['error']}", styles['Normal']))
+        elements.append(Spacer(1, 0.2 * inch))
+    else:
+        elements.append(Paragraph("Diet Plan: Not yet generated.", styles['Normal']))
         elements.append(Spacer(1, 0.2 * inch))
 
-    # Build PDF
+
     doc.build(elements)
     buffer.seek(0)
 
-    # Return PDF as a stream
     filename = f"Fitness_Report_{report_request.session_id}_{datetime.date.today()}.pdf"
     return StreamingResponse(buffer, media_type="application/pdf",
                              headers={"Content-Disposition": f"attachment; filename={filename}"})
