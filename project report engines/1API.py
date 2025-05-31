@@ -17,12 +17,21 @@ from reportlab.lib.units import inch
 from reportlab.lib import colors
 import io
 import datetime
-from sklearn.preprocessing import LabelEncoder
 
+from Exercisemodel.loader import load_exercise_models
+from dietrecommendationmodel.loader import load_diet_models
+
+# Global variables to hold loaded models
+exercise_clf = None
+exercise_reg = None
+exercise_encoders = None
+
+diet_model = None
+diet_encoders = None
 # --- Load Environment Variables ---
 load_dotenv()
 MONGODB_URI = os.getenv("MONGODB_URI")
-DB_NAME = os.getenv("DB_NAME", "fitness_predictions") # Default to 'fitness_predictions' if not set
+DB_NAME = os.getenv("DB_NAME", "vitafit")
 
 # --- FastAPI App Initialization ---
 app = FastAPI(
@@ -31,9 +40,27 @@ app = FastAPI(
     version="1.0.0"
 )
 
+from fastapi.middleware.cors import CORSMiddleware
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Or restrict to your frontend URL like ["http://localhost:3000"]
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
 # --- MongoDB Client Initialization ---
-mongo_client: Optional[MongoClient] = None
-db = None
+mongo_client: Optional[MongoClient] = MongoClient(MONGODB_URI)
+db = mongo_client[DB_NAME]
+
+# Test connection
+try:
+    mongo_client.admin.command("ping")
+    print(f"✅ Successfully connected to MongoDB database: {DB_NAME}")
+except Exception as e:
+    print(f"❌ Failed to connect to MongoDB: {e}")
 
 @app.on_event("startup")
 async def startup_db_client():
@@ -57,7 +84,6 @@ async def shutdown_db_client():
 # --- Global Variables for Models and Encoders ---
 multi_clf = None # Exercise Classifier
 multi_reg = None # Exercise Regressor
-diet_regressor = None # Diet Model
 label_encoders = None # Encoders for Exercise Model outputs (and gender for both, assuming commonality)
 diet_label_encoders = None # Encoders specifically for Diet Model's categorical inputs (exercise_type, intensity_level, activity_level)
 
@@ -74,35 +100,26 @@ DIET_FEATURE_COLUMNS_ORDER = [
 # --- Load Models and Encoders on Startup ---
 @app.on_event("startup")
 async def load_models():
-    global multi_clf, multi_reg, diet_regressor, label_encoders, diet_label_encoders
+    global multi_clf, multi_reg, label_encoders, diet_label_encoders
 
-    models_path = "app/models/" # Path inside the Docker container
-
-    # Load Exercise Models and their encoders
+    # Load Exercise Models
     try:
-        multi_clf = joblib.load(os.path.join(models_path, "multi_classifier.pkl"))
-        multi_reg = joblib.load(os.path.join(models_path, "multi_regressor.pkl"))
-        label_encoders = joblib.load(os.path.join(models_path, "label_encoders.pkl"))
-        print("Exercise prediction models and encoders loaded successfully!")
-    except FileNotFoundError as e:
-        print(f"Error loading exercise models: {e}. Make sure .pkl files are in {models_path}")
-        raise HTTPException(status_code=500, detail=f"Server setup error: Missing exercise model files. {e}")
+        exercise_models = load_exercise_models()
+        multi_clf = exercise_models["multi_clf"]
+        multi_reg = exercise_models["multi_reg"]
+        label_encoders = exercise_models["label_encoders"]
+        print("✅ Exercise models and encoders loaded successfully!")
     except Exception as e:
-        print(f"An unexpected error occurred loading exercise models: {e}")
+        print(f"❌ Failed to load exercise models: {e}")
         raise HTTPException(status_code=500, detail=f"Server setup error: Failed to load exercise models. {e}")
 
-    # --- Load Diet Model ---
+    # Load Diet Models
     try:
-        diet_regressor = joblib.load(os.path.join(models_path, "diet_model_rf.pkl")) # Corrected filename based on your input
-        diet_label_encoders = joblib.load(os.path.join(models_path, "diet_label_encoders.pkl")) # New encoder for diet model
-        print("Diet prediction model and encoders loaded successfully!")
-    except FileNotFoundError as e:
-        print(f"Error loading diet model: {e}. Make sure diet_model_rf.pkl and diet_label_encoders.pkl are in {models_path}")
-        # If diet prediction is optional, setting to None is fine. Otherwise, raise HTTPException.
-        diet_regressor = None
-        diet_label_encoders = None
+        diet_models = load_diet_models()
+        diet_label_encoders = diet_models["diet_label_encoders"]
+        print("✅ Diet model and encoders loaded successfully!")
     except Exception as e:
-        print(f"An unexpected error occurred loading diet model: {e}")
+        print(f"❌ Failed to load diet model: {e}")
         diet_regressor = None
         diet_label_encoders = None
 
