@@ -1,0 +1,179 @@
+.fitness-bg {
+  background: url('/fitness-bg.jpg') center/cover no-repeat;
+  height: 100vh;
+  width: 100vw;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow-y: auto;
+  padding: 2rem;
+}
+
+.form-overlay {
+  background-color: rgba(0, 0, 0, 0.7);
+  padding: 2rem;
+  border-radius: 12px;
+  width: 100%;
+  max-width: 1200px; /* Increased to allow side-by-side layout */
+  color: white;
+  animation: fadeIn 1.2s ease;
+}
+
+/* Form styles */
+.fitness-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+.fitness-form input,
+.fitness-form textarea,
+.fitness-form select {
+  padding: 0.8rem;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  outline: none;
+  background-color: rgba(255, 255, 255, 0.1);
+  color: black;
+  font-size: 1rem;
+  transition: background-color 0.3s ease, border-color 0.3s ease;
+}
+
+.fitness-form input::placeholder,
+.fitness-form textarea::placeholder {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.fitness-form input:focus,
+.fitness-form textarea:focus,
+.fitness-form select:focus {
+  background-color: rgba(255, 255, 255, 0.15);
+  border-color: #f97316;
+}
+
+.fade-text {
+  animation: fadeIn 1.5s ease-in;
+  text-align: center;
+  margin-bottom: 1rem;
+  font-size: 1.75rem;
+}
+
+.post-submit {
+  text-align: center;
+    animation: fadeIn 1.2s ease;
+}
+
+.report-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+.animated-btn {
+  background: #f97316;
+  color: white;
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 8px;
+  font-weight: bold;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: transform 0.3s ease;
+}
+
+.animated-btn:hover {
+  transform: scale(1.05);
+  background-color: #fb923c;
+}
+
+/* Wrapper for exercise and diet report side-by-side */
+.report-wrapper {
+  display: flex;
+  flex-direction: row;
+  gap: 2rem;
+  justify-content: center;
+  align-items: flex-start;
+  flex-wrap: nowrap; /* prevent wrapping on larger screens */
+  margin-top: 2rem;
+}
+
+/* Shared report style */
+.recommendation-report {
+  flex: 1 1 50%;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 1.5rem;
+  border-radius: 10px;
+  color: white;
+  animation: fadeIn 1.2s ease-in-out;
+}
+
+/* Diet plan specific style */
+.diet-plan {
+  animation: slideInFromRight 0.8s ease forwards;
+}
+
+/* Table style */
+.fitness-table {
+  width: 100%;
+  margin-top: 1rem;
+  border-collapse: collapse;
+  color: #fff;
+  text-align: center;
+}
+
+.fitness-table th,
+.fitness-table td {
+  padding: 0.75rem 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.fitness-table th {
+  background-color: rgba(249, 115, 22, 0.3);
+  font-weight: bold;
+}
+
+/* Diet plan animation */
+@keyframes slideInFromRight {
+  from {
+    opacity: 0;
+    transform: translateX(60px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.fade-in-table {
+  animation: fadeIn 1.2s ease-in-out;
+}
+
+.diet-final-section {
+  margin-top: 1.5rem;
+  text-align: center;
+}
+
+.diet-final-section p {
+  margin-bottom: 1rem;
+  font-weight: 500;
+}
+
+/* Responsive stacking */
+@media (max-width: 768px) {
+  .report-wrapper {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .recommendation-report {
+    width: 100%;
+    max-width: 100%;
+  }
+}
+
+.recommendation-report h2 {
+  margin-bottom: 1rem;
+}
