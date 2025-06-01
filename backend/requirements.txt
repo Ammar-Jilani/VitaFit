@@ -8,3 +8,4 @@ pydantic
 joblib
 reportlab
 pymongo
+nest_asyncio
