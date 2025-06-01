@@ -60,7 +60,6 @@
     color: white; /* White text for options */
 }
 
-
 .fade-text {
     animation: fadeIn 1.5s ease-in;
     text-align: center;
@@ -71,14 +70,6 @@
 .post-submit {
     text-align: center;
     animation: fadeIn 1.2s ease;
-}
-
-.report-buttons {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: 1rem;
-    margin-top: 1.5rem;
 }
 
 .animated-btn {
@@ -124,10 +115,12 @@
     -webkit-appearance: none; /* Remove default arrow on some browsers */
     -moz-appearance: none;
     appearance: none;
-    background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22white%22%20d%3D%22M287%2069.9a14.7%2014.7%200%200%200-20.8%200L146.2%20190.2%2026.4%2069.9a14.7%2014.7%200%200%200-20.8%200%2014.7%2014.7%200%200%000%2020.8L135.8%20232.7a14.7%2014.7%200%200%200%2020.8%200l110.2-110.2a14.7%2014.7%200%200%200%200-20.8z%22%2F%3E%3C%2Fsvg%3E'); /* Custom white arrow */
+    /* Custom white arrow SVG - ensure it's visible */
+    background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22white%22%20d%3D%22M287%2069.9a14.7%2014.7%200%200%200-20.8%200L146.2%20190.2%2026.4%2069.9a14.7%2014.7%200%200%200-20.8%200%2014.7%2014.7%200%200%000%2020.8L135.8%20232.7a14.7%2014.7%200%200%200%2020.8%200l110.2-110.2a14.7%2014.7%200%200%200%200-20.8z%22%2F%3E%3C%2Fsvg%3E');
     background-repeat: no-repeat;
     background-position: right 8px center;
     background-size: 12px;
+    padding-right: 25px; /* Add padding to prevent text overlapping the arrow */
 }
 
 /* Override the default margin-bottom for inputs within .input-group to avoid double spacing */
@@ -137,25 +130,61 @@
 }
 /* --- End new styles --- */
 
-/* Wrapper for exercise and diet report side-by-side */
+/* --- BMI Display Styles --- */
+.bmi-display {
+    padding: 0.8rem;
+    border-radius: 8px;
+    border: 1px solid #f97316; /* Highlight border */
+    background-color: rgba(249, 115, 22, 0.2); /* Slightly orange tint */
+    color: white;
+    font-size: 1rem;
+    font-weight: bold; /* Make the BMI value stand out */
+    text-align: center;
+    display: flex; /* Use flex to align content within */
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem; /* Space between label and value */
+    margin-bottom: 1rem; /* Consistent spacing */
+    min-height: 44px; /* Ensure it matches input height */
+}
+
+.bmi-display strong {
+    color: #f97316; /* Color the actual BMI value */
+}
+/* --- End BMI Display Styles --- */
+
+/* Main wrapper for all post-submission content */
 .report-wrapper {
     display: flex;
-    flex-direction: row;
+    flex-direction: column; /* Stack children vertically */
+    gap: 2rem; /* Space between sections */
+    justify-content: center;
+    align-items: center; /* Center items horizontally in the column */
+    margin-top: 2rem;
+    width: 100%; /* Ensure it takes full width of form-overlay */
+}
+
+/* Container for Exercise and Diet Reports when side-by-side */
+.reports-container {
+    display: flex;
+    flex-direction: row; /* Default to side-by-side */
     gap: 2rem;
     justify-content: center;
     align-items: flex-start;
-    flex-wrap: nowrap; /* prevent wrapping on larger screens */
-    margin-top: 2rem;
+    flex-wrap: wrap; /* Allow wrapping on smaller screens */
+    width: 100%; /* Take full width of report-wrapper */
 }
 
 /* Shared report style */
 .recommendation-report {
-    flex: 1 1 50%;
+    flex: 1 1 48%; /* Allows them to grow and shrink, with a base of 48% for gap */
     background: rgba(255, 255, 255, 0.1);
-    padding: 1.5rem;
+    padding: 1.5rem; /* This padding is likely causing the issue */
     border-radius: 10px;
     color: white;
     animation: fadeIn 1.2s ease-in-out;
+    max-width: 580px; /* Limit individual report width to prevent excessive stretching */
+    box-sizing: border-box; /* Include padding in element's total width/height */
 }
 
 /* Diet plan specific style */
@@ -170,13 +199,16 @@
     border-collapse: collapse;
     color: #fff;
     text-align: center;
+    box-sizing: border-box; /* IMPORTANT: Add box-sizing here */
+    table-layout: fixed; /* This helps prevent content from pushing columns out */
 }
 
 .fitness-table th,
 .fitness-table td {
-    padding: 0.75rem 1rem;
+    padding: 0.75rem 0.5rem; /* Slightly reduced horizontal padding */
     border: 1px solid rgba(255, 255, 255, 0.2);
     background-color: rgba(255, 255, 255, 0.05);
+    word-wrap: break-word; /* Ensure long words break */
 }
 
 .fitness-table th {
@@ -196,30 +228,62 @@
     }
 }
 
-.fade-in-table {
+.fade-in-table { /* Still exists but not used in JSX for reports */
     animation: fadeIn 1.2s ease-in-out;
 }
 
-.diet-final-section {
-    margin-top: 1.5rem;
+/* Styles for the new "Get Diet Plan" button section */
+.diet-plan-prompt {
     text-align: center;
+    margin-top: 2rem; /* Space above this section */
+    margin-bottom: 2rem; /* Space below this section */
+    padding: 1.5rem;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    width: 100%; /* Take full width */
+    max-width: 500px; /* Constrain its width for better appearance */
+    animation: fadeIn 1.2s ease-in-out;
 }
 
-.diet-final-section p {
+.diet-plan-prompt p {
     margin-bottom: 1rem;
-    font-weight: 500;
+    font-size: 1.1rem;
 }
 
-/* Responsive stacking */
+/* Styles for the final download button section */
+.final-report-download {
+    text-align: center;
+    margin-top: 2rem; /* Space above this section */
+    padding: 1.5rem;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    width: 100%; /* Take full width */
+    max-width: 500px; /* Constrain its width for better appearance */
+    animation: fadeIn 1.2s ease-in-out;
+}
+
+.final-report-download p {
+    margin-bottom: 1rem;
+    font-size: 1.1rem;
+}
+
+/* Responsive stacking for .reports-container */
 @media (max-width: 768px) {
-    .report-wrapper {
-        flex-direction: column;
+    .reports-container {
+        flex-direction: column; /* Stack reports vertically on small screens */
         align-items: center;
     }
 
     .recommendation-report {
         width: 100%;
-        max-width: 100%;
+        max-width: 100%; /* Allow full width on smaller screens */
+        padding: 1rem; /* Adjusted padding for smaller screens */
+    }
+
+    .diet-plan-prompt,
+    .final-report-download {
+        width: 100%;
+        max-width: 100%; /* Allow full width on smaller screens */
     }
 }
 

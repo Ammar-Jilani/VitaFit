@@ -2,12 +2,11 @@ import os
 import uuid
 from typing import Optional, Literal, Dict, Any
 from dotenv import load_dotenv
-
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 import pandas as pd
-import numpy as np # Keep numpy import
+import numpy as np
 import joblib
 from pymongo import MongoClient
 from reportlab.lib.pagesizes import letter
@@ -102,7 +101,7 @@ async def startup_all():
         raise HTTPException(status_code=500, detail=f"Server startup error: Failed to connect to MongoDB. {e}")
 
     # --- 2. Load Models and Encoders ---
-    exercise_models_path = "exercisemodel"
+    exercise_models_path = "Exercise_Models"
     try:
         multi_clf = joblib.load(os.path.join(exercise_models_path, "multi_classifier.pkl"))
         multi_reg = joblib.load(os.path.join(exercise_models_path, "multi_regressor.pkl"))
@@ -112,14 +111,6 @@ async def startup_all():
         label_encoders = loaded_encoders # Assign to global only if valid
         print("Exercise prediction models and encoders loaded successfully!")
 
-        # --- DEBUGGING PRINTS FOR label_encoders ---
-        print(f"DEBUG (startup): label_encoders keys: {list(label_encoders.keys())}")
-        if 'frequency_per_week' in label_encoders:
-            print(f"DEBUG (startup): frequency_per_week LabelEncoder classes: {list(label_encoders['frequency_per_week'].classes_)}")
-        else:
-            print("DEBUG (startup): 'frequency_per_week' not found in label_encoders. THIS IS AN ISSUE IF YOUR MODEL PREDICTS IT CATEGORICALLY.")
-        # --- END DEBUGGING PRINTS ---
-
     except FileNotFoundError as e:
         print(f"Error loading exercise models: {e}. Make sure .pkl files are in {exercise_models_path}")
         raise HTTPException(status_code=500, detail=f"Server setup error: Missing exercise model files. {e}")
@@ -128,7 +119,7 @@ async def startup_all():
         raise HTTPException(status_code=500, detail=f"Server setup error: Failed to load exercise models. {e}")
 
     # Load Diet Model and its encoders
-    diet_models_path = "dietrecommendationmodel"
+    diet_models_path = "Diet_Recommendation_Models"
     try:
         diet_regressor = joblib.load(os.path.join(diet_models_path, "diet_model_rf.pkl"))
         loaded_diet_encoders = joblib.load(os.path.join(diet_models_path, "diet_label_encoders.pkl"))
@@ -165,11 +156,6 @@ class UserInput(BaseModel):
     weight_unit: Literal["kg", "lbs"] = Field(..., description="Unit of weight.")
     calories_intake: int = Field(..., gt=0, description="User's daily calorie intake.")
 
-    # Optional fields for diet plan (can be submitted later)
-    medical_conditions: Optional[str] = Field(None, description="Any medical conditions (e.g., diabetes, hypertension).")
-    dietary_restrictions: Optional[str] = Field(None, description="Any dietary restrictions (e.g., vegetarian, vegan, allergies).")
-    food_preferences: Optional[str] = Field(None, description="Preferred foods or dislikes.")
-
 
 class UserPersonalDetails(BaseModel):
     first_name: Optional[str] = None
@@ -183,9 +169,12 @@ class ReportRequest(BaseModel):
 
 class DietPlanRequest(BaseModel):
     session_id: str = Field(..., description="Session ID to retrieve previous exercise predictions and user data.")
-    medical_conditions: Optional[str] = Field(None, description="Any medical conditions (e.g., diabetes, hypertension).")
-    dietary_restrictions: Optional[str] = Field(None, description="Any dietary restrictions (e.g., vegetarian, vegan, allergies).")
-    food_preferences: Optional[str] = Field(None, description="Preferred foods or dislikes.")
+    # Medical conditions, dietary restrictions, food preferences are no longer direct model inputs
+    # and are not required to be sent with this request for model prediction.
+    # If collected for record-keeping only, they would be handled elsewhere (e.g., initial user input).
+    # Since they are not used by the models, they are removed from here to simplify API.
+    # They can still be stored in the database if the initial UserInput is updated to include them.
+    # For now, we assume they are not collected if not used by models.
 
 
 # --- Helper Functions ---
@@ -269,51 +258,20 @@ async def predict_exercise_plan(user_input: UserInput):
         y_class_pred_encoded = multi_clf.predict(df_for_exercise) # type: ignore
         y_reg_pred = multi_reg.predict(df_for_exercise) # type: ignore
 
-        # --- DEBUGGING PRINTS FOR MODEL OUTPUT ---
-        print(f"DEBUG (predict_exercise): Raw y_class_pred_encoded: {y_class_pred_encoded}")
-        # The multi_clf output needs to be carefully mapped to your expected outputs.
-        # Based on your CSV example: 'exercise_type', 'intensity_level', 'frequency_per_week'
-        # So y_class_pred_encoded[0, 0] is exercise_type, [0, 1] is intensity_level, [0, 2] is frequency_per_week
-        if y_class_pred_encoded.shape[1] > 2: # Ensure index 2 exists
-            print(f"DEBUG (predict_exercise): Raw encoded frequency_per_week: {y_class_pred_encoded[0, 2]}")
-        else:
-            print("DEBUG (predict_exercise): y_class_pred_encoded has less than 3 columns. Cannot get frequency_per_week.")
-        # --- END DEBUGGING PRINTS ---
-
         predicted_exercise_type = label_encoders['exercise_type'].inverse_transform([y_class_pred_encoded[0, 0]])[0] # type: ignore
         predicted_intensity_level = label_encoders['intensity_level'].inverse_transform([y_class_pred_encoded[0, 1]])[0] # type: ignore
         
-        # Handle frequency_per_week: If encoder is missing, use raw predicted value as integer,
-        # otherwise decode it.
-        predicted_frequency_per_week_val = None
-        if 'frequency_per_week' in label_encoders and label_encoders['frequency_per_week'] is not None:
-            # Check if the predicted value is within the encoder's known classes
-            predicted_encoded_freq = y_class_pred_encoded[0, 2]
-            if predicted_encoded_freq in label_encoders['frequency_per_week'].classes_: # This is an incorrect check, classes_ holds original labels not encoded values.
-                 # The correct check would be if the predicted_encoded_freq is an index within the length of classes_
-                predicted_frequency_per_week_val = label_encoders['frequency_per_week'].inverse_transform([predicted_encoded_freq])[0] # type: ignore
-                print(f"DEBUG: Decoded frequency_per_week using encoder: {predicted_frequency_per_week_val}")
-            else:
-                # If the predicted encoded value is not in the encoder's known *encoded values*, this means the model predicted something unexpected.
-                # In most sklearn LabelEncoder cases, classes_ are the original labels, and inverse_transform takes encoded integers.
-                # The issue is typically if the predicted_encoded_freq is out of bounds for the inverse_transform.
-                print(f"WARNING: Predicted encoded frequency '{predicted_encoded_freq}' not found in LabelEncoder's classes for 'frequency_per_week'.")
-                # Fallback to direct conversion if we *assume* the model predicts directly the number
-                predicted_frequency_per_week_val = int(predicted_encoded_freq) if isinstance(predicted_encoded_freq, (int, np.integer)) else -1
-        else:
-            print("WARNING: 'frequency_per_week' LabelEncoder is missing. Attempting to use raw predicted value as integer.")
-            # Assume y_class_pred_encoded[0, 2] is directly the integer frequency if no encoder is found
-            try:
-                predicted_frequency_per_week_val = int(y_class_pred_encoded[0, 2])
-            except (IndexError, TypeError, ValueError):
-                predicted_frequency_per_week_val = -1 # Default to -1 if prediction is not a valid integer or not present
+        # frequency_per_week comes from the regression model (multi_reg)
+        predicted_frequency_per_week_val = round(y_reg_pred[0, 0]) # First output of multi_reg is frequency_per_week
+        predicted_duration_minutes = round(y_reg_pred[0, 1], 2) # Second output is duration_minutes
+        predicted_estimated_calorie_burn = round(y_reg_pred[0, 2], 2) # Third output is estimated_calorie_burn
 
         exercise_predictions = {
             "exercise_type": predicted_exercise_type,
             "intensity_level": predicted_intensity_level,
-            "frequency_per_week": predicted_frequency_per_week_val, # Now should be an integer or -1
-            "duration_minutes": round(y_reg_pred[0, 0], 2),
-            "estimated_calorie_burn": round(y_reg_pred[0, 1], 2)
+            "frequency_per_week": int(predicted_frequency_per_week_val), # Ensure it's an integer
+            "duration_minutes": predicted_duration_minutes,
+            "estimated_calorie_burn": predicted_estimated_calorie_burn
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error during exercise prediction: {str(e)}")
@@ -373,7 +331,7 @@ async def predict_diet_plan(diet_request: DietPlanRequest):
     diet_predictions = {}
     try:
         # Ensure frequency_per_week is an integer for activity level inference
-        freq_for_activity = int(exercise_predictions.get("frequency_per_week", 0))
+        freq_for_activity = int(exercise_predictions.get("frequency_per_week", 0)) # Should be an integer now
         
         activity_level = infer_activity_level(
             freq_for_activity,
@@ -387,7 +345,7 @@ async def predict_diet_plan(diet_request: DietPlanRequest):
         diet_gender_raw = raw_user_input['gender'].lower() # Use raw string for encoding
 
         # Re-encode gender specifically for diet model if diet_label_encoders['gender'] exists
-        if 'gender' in diet_label_encoders and diet_label_encoders['gender'] is not None:
+        if diet_label_encoders is not None and 'gender' in diet_label_encoders and diet_label_encoders['gender'] is not None:
             try:
                 diet_encoded_gender = diet_label_encoders['gender'].transform([diet_gender_raw])[0]
             except ValueError:
@@ -398,6 +356,13 @@ async def predict_diet_plan(diet_request: DietPlanRequest):
             print("WARNING: Diet model's 'gender' LabelEncoder is missing. Using pre-processed gender from exercise step.")
             diet_encoded_gender = processed_core_features["gender"] # This was already an int (0 or 1)
 
+        if (
+            diet_label_encoders is None or
+            'exercise_type' not in diet_label_encoders or diet_label_encoders['exercise_type'] is None or
+            'intensity_level' not in diet_label_encoders or diet_label_encoders['intensity_level'] is None or
+            'activity_level' not in diet_label_encoders or diet_label_encoders['activity_level'] is None
+        ):
+            raise HTTPException(status_code=500, detail="Diet label encoders for exercise_type, intensity_level, or activity_level are missing or not loaded.")
         encoded_exercise_type = diet_label_encoders['exercise_type'].transform([exercise_predictions["exercise_type"]])[0]
         encoded_intensity_level = diet_label_encoders['intensity_level'].transform([exercise_predictions["intensity_level"]])[0]
         encoded_activity_level = diet_label_encoders['activity_level'].transform([activity_level])[0]
@@ -435,14 +400,11 @@ async def predict_diet_plan(diet_request: DietPlanRequest):
     # Update the stored record with diet predictions and any new optional user inputs
     if db is not None:
         try:
-            # Update the diet_predictions field
+            # Update the diet_predictions field. Note: medical_conditions etc. are not expected from diet_request
             db.predictions.update_one(
                 {"session_id": diet_request.session_id},
                 {"$set": {
                     "diet_predictions": convert_numpy_types(diet_predictions), # Convert NumPy types
-                    "raw_user_input.medical_conditions": diet_request.medical_conditions, # Update optional fields
-                    "raw_user_input.dietary_restrictions": diet_request.dietary_restrictions,
-                    "raw_user_input.food_preferences": diet_request.food_preferences,
                     "last_updated": datetime.datetime.utcnow() # Add a timestamp for update
                 }}
             )
@@ -499,13 +461,25 @@ async def generate_report(report_request: ReportRequest):
             elements.append(Spacer(1, 0.2 * inch))
 
     elements.append(Paragraph("Submitted Data:", styles['h2']))
-    raw_input_data = []
-    # Include all raw_user_input for the report
-    for key, value in prediction_record.get('raw_user_input', {}).items():
-        if value is not None and value != '': # Exclude None or empty string for cleaner report
-            raw_input_data.append([key.replace('_', ' ').title() + ":", str(value)])
-    if raw_input_data:
-        elements.append(Table(raw_input_data, style=TableStyle([
+    raw_input_data_for_report = []
+    # Include all raw_user_input for the report.
+    # Note: Medical conditions, dietary restrictions, food preferences might be present
+    # if previously stored, even if they are no longer part of the UserInput model for new requests.
+    raw_user_input_stored = prediction_record.get('raw_user_input', {})
+    for key, value in raw_user_input_stored.items():
+        if value is not None and value != '' and key not in ['medical_conditions', 'dietary_restrictions', 'food_preferences']:
+            raw_input_data_for_report.append([key.replace('_', ' ').title() + ":", str(value)])
+    
+    # Add optional fields only if they exist in the stored record
+    if raw_user_input_stored.get('medical_conditions'):
+        raw_input_data_for_report.append(["Medical Conditions:", raw_user_input_stored['medical_conditions']])
+    if raw_user_input_stored.get('dietary_restrictions'):
+        raw_input_data_for_report.append(["Dietary Restrictions:", raw_user_input_stored['dietary_restrictions']])
+    if raw_user_input_stored.get('food_preferences'):
+        raw_input_data_for_report.append(["Food Preferences:", raw_user_input_stored['food_preferences']])
+
+    if raw_input_data_for_report:
+        elements.append(Table(raw_input_data_for_report, style=TableStyle([
             ('GRID', (0,0), (-1,-1), 1, colors.black),
             ('BACKGROUND', (0,0), (-1,-1), colors.lightgrey),
             ('FONTNAME', (0,0), (-1,-1), 'Helvetica'),

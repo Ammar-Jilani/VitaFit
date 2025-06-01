@@ -5,9 +5,11 @@ import './Navbar.css';
 function Navbar() {
   return (
     <nav className="navbar">
-      <div className="logo">VitaFit</div>
+      <Link to="/" className="logo-link"> {/* Added Link here */}
+        <div className="logo">VitaFit</div>
+      </Link>
       <ul className="nav-links">
-        <li><Link to="/">Home</Link></li>
+        {/* Removed <li><Link to="/">Home</Link></li> */}
         <li><Link to="/about">About VitaFit</Link></li>
       </ul>
     </nav>
