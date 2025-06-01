@@ -17,3 +17,4 @@ BACKEND_ROOT = os.path.abspath(os.path.join(SETTINGS_DIR, os.pardir)) # Ensure B
 # Define paths to model directories relative to the backend root, ensuring they are absolute
 EXERCISE_MODELS_PATH = os.path.abspath(os.path.join(BACKEND_ROOT, "models", "Exercise_Models"))
 DIET_MODELS_PATH = os.path.abspath(os.path.join(BACKEND_ROOT, "models", "Diet_Recommendation_Models"))
+IMAGE_CLASSIFIER_MODELS_PATH = os.path.abspath(os.path.join(BACKEND_ROOT, "models", "Image_Classifier_Model")) # Add this line!

@@ -3,24 +3,26 @@ import os
 import uuid
 import datetime
 from typing import Optional, Any
-from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi import FastAPI, HTTPException, Request, Response, UploadFile, File # Added UploadFile, File
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
-import io
+from PIL import Image # For handling image files
+import io # For handling image bytes
 
 # Import from your new modules
-from config.settings import DB_NAME
+from config.settings import DB_NAME, IMAGE_CLASSIFIER_MODELS_PATH # Added IMAGE_CLASSIFIER_MODELS_PATH
 from database.mongodb_client import connect_to_mongodb, close_mongodb_connection, get_db_collection
 from models.request_models import UserInput, UserPersonalDetails, ReportRequest, DietPlanRequest
 from services.exercise_service import load_exercise_models, predict_exercise
 from services.diet_service import load_diet_models, predict_diet
 from services.report_service import generate_report as generate_pdf_report # Renamed to avoid conflict
+from models.Image_Classifier_Model.image_classifier_logic import ImageClassifier, DetectionResponse # Import the new class and models
 from utils.helpers import convert_numpy_types # To convert numpy types for JSON/MongoDB storage
 
 # --- FastAPI App Initialization ---
 app = FastAPI(
     title="Fitness and Diet Prediction API",
-    description="API for predicting exercise and diet plans based on user data.",
+    description="API for predicting exercise and diet plans based on user data, and dish image classification.", # Updated description
     version="1.0.0"
 )
 
@@ -33,17 +35,21 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# --- Global variable for Image Classifier ---
+image_classifier_model: Optional[ImageClassifier] = None
+
 # --- Startup Events ---
 @app.on_event("startup")
 async def startup_all():
     """
     Handles all necessary startup procedures:
     1. Connect to MongoDB.
-    2. Load Machine Learning Models (Exercise, Diet).
+    2. Load Machine Learning Models (Exercise, Diet, Image Classifier).
     """
     # 1. Connect to MongoDB
     try:
         await connect_to_mongodb()
+        print("Connected to MongoDB database:", DB_NAME) # Added print for confirmation
     except Exception as e:
         print(f"Application startup failed due to MongoDB connection error: {e}")
         raise HTTPException(status_code=500, detail=f"Server startup error: Failed to connect to MongoDB. {e}")
@@ -51,13 +57,30 @@ async def startup_all():
     # 2. Load Machine Learning Models
     try:
         await load_exercise_models()
+        print("Exercise models loaded successfully!") # Added print
         await load_diet_models()
+        print("Diet models loaded successfully!") # Added print
+        
+        # Load Image Classifier Model
+        global image_classifier_model
+        # Use os.path.join with the base path and the model file name
+        yolo_model_file_name = "image_classification.pt" # Ensure this matches your file name
+        full_yolo_model_path = os.path.join(IMAGE_CLASSIFIER_MODELS_PATH, yolo_model_file_name)
+        
+        try:
+            image_classifier_model = ImageClassifier(model_path=full_yolo_model_path)
+            if image_classifier_model.yolo_model is None: # Check if model loading failed inside the class
+                raise RuntimeError("YOLO model did not load correctly within ImageClassifier.")
+            print(f"Image classifier model loaded successfully from {full_yolo_model_path}!")
+        except Exception as e:
+            print(f"Error loading image classifier model: {e}")
+            image_classifier_model = None # Set to None if loading fails, but don't stop startup
+            print("Warning: Image classification endpoint will not be available.")
+
     except HTTPException as e:
-        # Re-raise HTTPExceptions from model loading to propagate error message
-        raise e
+        raise e # Re-raise HTTPExceptions from model loading
     except Exception as e:
-        # Catch any other unexpected errors during model loading
-        print(f"An unexpected error occurred during model loading: {e}")
+        print(f"An unexpected error occurred during ML model loading: {e}")
         raise HTTPException(status_code=500, detail=f"Server startup error: Failed to load ML models. {e}")
 
 
@@ -65,6 +88,7 @@ async def startup_all():
 async def shutdown_all():
     """Closes all necessary connections on application shutdown."""
     await close_mongodb_connection()
+    print("Disconnected from MongoDB.") # Added print for confirmation
 
 # --- API Endpoints ---
 
@@ -159,3 +183,21 @@ async def predict_diet_plan_endpoint(diet_request: DietPlanRequest):
 @app.post("/generate_report", response_class=StreamingResponse)
 async def generate_report_endpoint(report_request: ReportRequest):
     return await generate_pdf_report(report_request)
+
+@app.post("/classify_dish", response_model=DetectionResponse) # New endpoint for image classification
+async def classify_dish_endpoint(file: UploadFile = File(...)):
+    """
+    Upload an image to detect dishes and get their information using the YOLOv8 model.
+    """
+    if image_classifier_model is None:
+        raise HTTPException(status_code=500, detail="Dish detection model is not loaded or available.")
+
+    if not file.content_type or not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Invalid file type. Please upload an image.")
+
+    try:
+        image_bytes = await file.read()
+        detection_response = image_classifier_model.predict_dish_from_image(image_bytes)
+        return detection_response
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Dish detection failed: {str(e)}")
