@@ -173,7 +173,6 @@ class DietPlanRequest(BaseModel):
     # and are not required to be sent with this request for model prediction.
     # If collected for record-keeping only, they would be handled elsewhere (e.g., initial user input).
     # Since they are not used by the models, they are removed from here to simplify API.
-    # They can still be stored in the database if the initial UserInput is updated to include them.
     # For now, we assume they are not collected if not used by models.
 
 
@@ -433,44 +432,83 @@ async def generate_report(report_request: ReportRequest):
         raise HTTPException(status_code=404, detail=f"No predictions found for session ID: {report_request.session_id}")
 
     buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=letter)
+    doc = SimpleDocTemplate(buffer, pagesize=letter,
+                            rightMargin=inch, leftMargin=inch,
+                            topMargin=inch, bottomMargin=inch)
+    
     styles = getSampleStyleSheet()
+
+    # Define custom styles
+    styles.add(ParagraphStyle(name='ReportTitle',
+                               fontSize=24,
+                               leading=28,
+                               alignment=1, # TA_CENTER
+                               spaceAfter=20,
+                               fontName='Helvetica-Bold'))
+    styles.add(ParagraphStyle(name='SectionHeader',
+                               fontSize=16,
+                               leading=18,
+                               spaceBefore=10,
+                               spaceAfter=8,
+                               fontName='Helvetica-Bold',
+                               textColor=colors.darkblue))
+    styles.add(ParagraphStyle(name='SubSectionHeader',
+                               fontSize=14,
+                               leading=16,
+                               spaceBefore=8,
+                               spaceAfter=6,
+                               fontName='Helvetica-BoldOblique',
+                               textColor=colors.dimgray))
+    styles.add(ParagraphStyle(name='NormalText',
+                               fontSize=10,
+                               leading=12,
+                               spaceAfter=5,
+                               fontName='Helvetica'))
+    styles.add(ParagraphStyle(name='TableCaption',
+                               fontSize=10,
+                               leading=12,
+                               spaceAfter=5,
+                               alignment=1, # TA_CENTER
+                               fontName='Helvetica-Bold'))
+
     elements = []
 
-    elements.append(Paragraph("Fitness and Diet Plan Report", styles['h1']))
-    elements.append(Spacer(1, 0.2 * inch))
+    # Title
+    elements.append(Paragraph("Fitness and Diet Plan Report", styles['ReportTitle']))
+    elements.append(Spacer(1, 0.3 * inch))
 
+    # User Details
     if report_request.user_details and any(report_request.user_details.dict().values()):
-        elements.append(Paragraph("User Details:", styles['h2']))
+        elements.append(Paragraph("User Personal Details", styles['SectionHeader']))
         user_data = []
         if report_request.user_details.first_name: user_data.append(["First Name:", report_request.user_details.first_name])
         if report_request.user_details.last_name: user_data.append(["Last Name:", report_request.user_details.last_name])
         if report_request.user_details.email: user_data.append(["Email:", report_request.user_details.email])
         if report_request.user_details.phone: user_data.append(["Phone:", report_request.user_details.phone])
+        
         if user_data:
             table_style = TableStyle([
-                ('BACKGROUND', (0,0), (-1,0), colors.grey),
-                ('TEXTCOLOR', (0,0), (-1,0), colors.whitesmoke),
+                ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#E8F5E9')), # Light green background for all data rows
+                ('TEXTCOLOR', (0,0), (-1,-1), colors.black), # Ensure text is black for readability
                 ('ALIGN', (0,0), (-1,-1), 'LEFT'),
-                ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
-                ('BOTTOMPADDING', (0,0), (-1,0), 12),
-                ('BACKGROUND', (0,1), (-1,-1), colors.beige),
-                ('GRID', (0,0), (-1,-1), 1, colors.black)
+                ('FONTNAME', (0,0), (-1,-1), 'Helvetica'), # Regular font for data
+                ('GRID', (0,0), (-1,-1), 1, colors.HexColor('#A5D6A7')), # Green grid
+                ('LEFTPADDING', (0,0), (-1,-1), 6),
+                ('RIGHTPADDING', (0,0), (-1,-1), 6),
+                ('TOPPADDING', (0,0), (-1,-1), 6),
+                ('BOTTOMPADDING', (0,0), (-1,-1), 6),
             ])
-            elements.append(Table(user_data, style=table_style))
+            elements.append(Table(user_data, style=table_style, colWidths=[2*inch, 4*inch]))
             elements.append(Spacer(1, 0.2 * inch))
 
-    elements.append(Paragraph("Submitted Data:", styles['h2']))
+    # Submitted Data
+    elements.append(Paragraph("Submitted Input Data", styles['SectionHeader']))
     raw_input_data_for_report = []
-    # Include all raw_user_input for the report.
-    # Note: Medical conditions, dietary restrictions, food preferences might be present
-    # if previously stored, even if they are no longer part of the UserInput model for new requests.
     raw_user_input_stored = prediction_record.get('raw_user_input', {})
     for key, value in raw_user_input_stored.items():
         if value is not None and value != '' and key not in ['medical_conditions', 'dietary_restrictions', 'food_preferences']:
             raw_input_data_for_report.append([key.replace('_', ' ').title() + ":", str(value)])
     
-    # Add optional fields only if they exist in the stored record
     if raw_user_input_stored.get('medical_conditions'):
         raw_input_data_for_report.append(["Medical Conditions:", raw_user_input_stored['medical_conditions']])
     if raw_user_input_stored.get('dietary_restrictions'):
@@ -480,50 +518,65 @@ async def generate_report(report_request: ReportRequest):
 
     if raw_input_data_for_report:
         elements.append(Table(raw_input_data_for_report, style=TableStyle([
-            ('GRID', (0,0), (-1,-1), 1, colors.black),
-            ('BACKGROUND', (0,0), (-1,-1), colors.lightgrey),
+            ('GRID', (0,0), (-1,-1), 1, colors.HexColor('#BDBDBD')), # Grey grid
+            ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#F5F5F5')), # Light grey background
             ('FONTNAME', (0,0), (-1,-1), 'Helvetica'),
-            ('ALIGN', (0,0), (-1,-1), 'LEFT')
-        ])))
+            ('ALIGN', (0,0), (-1,-1), 'LEFT'),
+            ('LEFTPADDING', (0,0), (-1,-1), 6),
+            ('RIGHTPADDING', (0,0), (-1,-1), 6),
+            ('TOPPADDING', (0,0), (-1,-1), 6),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 6),
+        ]), colWidths=[2*inch, 4*inch]))
         elements.append(Spacer(1, 0.2 * inch))
 
-    elements.append(Paragraph("Exercise Plan:", styles['h2']))
+    # Exercise Plan
+    elements.append(Paragraph("Generated Exercise Plan", styles['SectionHeader']))
     exercise_data = []
     for key, value in prediction_record.get('exercise_predictions', {}).items():
         exercise_data.append([key.replace('_', ' ').title() + ":", str(value)])
     if exercise_data:
         elements.append(Table(exercise_data, style=TableStyle([
-            ('GRID', (0,0), (-1,-1), 1, colors.black),
-            ('BACKGROUND', (0,0), (-1,-1), colors.lightgreen),
+            ('GRID', (0,0), (-1,-1), 1, colors.HexColor('#81C784')), # Green grid
+            ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#C8E6C9')), # Lighter green background
             ('FONTNAME', (0,0), (-1,-1), 'Helvetica'),
-            ('ALIGN', (0,0), (-1,-1), 'LEFT')
-        ])))
+            ('ALIGN', (0,0), (-1,-1), 'LEFT'),
+            ('LEFTPADDING', (0,0), (-1,-1), 6),
+            ('RIGHTPADDING', (0,0), (-1,-1), 6),
+            ('TOPPADDING', (0,0), (-1,-1), 6),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 6),
+        ]), colWidths=[2.5*inch, 3.5*inch]))
         elements.append(Spacer(1, 0.2 * inch))
 
-    # Only include Diet Plan if it exists and is not empty
+    # Diet Plan
     diet_predictions_data = prediction_record.get('diet_predictions', {})
     if diet_predictions_data and not (isinstance(diet_predictions_data, dict) and 'error' in diet_predictions_data):
-        elements.append(Paragraph("Diet Plan:", styles['h2']))
+        elements.append(Paragraph("Generated Diet Plan", styles['SectionHeader']))
         diet_data = []
         for key, value in diet_predictions_data.items():
             if key != "message": # Don't display message key in the table
                 diet_data.append([key.replace('_', ' ').title() + ":", str(value)])
         if diet_data:
             elements.append(Table(diet_data, style=TableStyle([
-                ('GRID', (0,0), (-1,-1), 1, colors.black),
-                ('BACKGROUND', (0,0), (-1,-1), colors.lightblue),
+                ('GRID', (0,0), (-1,-1), 1, colors.HexColor('#64B5F6')), # Blue grid
+                ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#BBDEFB')), # Lighter blue background
                 ('FONTNAME', (0,0), (-1,-1), 'Helvetica'),
-                ('ALIGN', (0,0), (-1,-1), 'LEFT')
-            ])))
+                ('ALIGN', (0,0), (-1,-1), 'LEFT'),
+                ('LEFTPADDING', (0,0), (-1,-1), 6),
+                ('RIGHTPADDING', (0,0), (-1,-1), 6),
+                ('TOPPADDING', (0,0), (-1,-1), 6),
+                ('BOTTOMPADDING', (0,0), (-1,-1), 6),
+            ]), colWidths=[2.5*inch, 3.5*inch]))
             elements.append(Spacer(1, 0.2 * inch))
     elif diet_predictions_data and "error" in diet_predictions_data:
-        elements.append(Paragraph(f"Diet Plan Error: {diet_predictions_data['error']}", styles['Normal']))
+        elements.append(Paragraph("Diet Plan Status:", styles['SectionHeader']))
+        elements.append(Paragraph(f"Error: {diet_predictions_data['error']}", styles['NormalText']))
         elements.append(Spacer(1, 0.2 * inch))
     else:
-        elements.append(Paragraph("Diet Plan: Not yet generated.", styles['Normal']))
+        elements.append(Paragraph("Diet Plan Status:", styles['SectionHeader']))
+        elements.append(Paragraph("Diet plan has not yet been generated for this session. Please use the /predict_diet endpoint first.", styles['NormalText']))
         elements.append(Spacer(1, 0.2 * inch))
 
-
+    # Build PDF
     doc.build(elements)
     buffer.seek(0)
 

@@ -70,49 +70,102 @@ function FitnessPlanner() {
     }, []);
 
     const validateForm = () => {
-        const { name, mobile, email, age, gender, heightValue, weightValue, caloriesIntake } = formData;
+    const { name, mobile, email, age, gender, heightValue, heightUnit, weightValue, weightUnit, caloriesIntake } = formData;
 
-        if (!name.trim()) {
-            setPredictionError('Full Name is required.');
-            return false;
-        }
-        if (!mobile.trim()) {
-            setPredictionError('Mobile Number is required.');
-            return false;
-        }
-        // Basic mobile number validation: check if it contains only digits
-        if (!/^\d+$/.test(mobile.trim())) {
-            setPredictionError('Mobile Number should only contain digits.');
-            return false;
-        }
-        if (!email.trim()) {
-            setPredictionError('Email is required.');
-            return false;
-        }
-        if (!age || isNaN(parseInt(age)) || parseInt(age) <= 0) {
-            setPredictionError('Age must be a valid positive number.');
-            return false;
-        }
-        if (!gender) {
-            setPredictionError('Gender is required.');
-            return false;
-        }
-        if (!heightValue || isNaN(parseFloat(heightValue)) || parseFloat(heightValue) <= 0) {
-            setPredictionError('Height must be a valid positive number.');
-            return false;
-        }
-        if (!weightValue || isNaN(parseFloat(weightValue)) || parseFloat(weightValue) <= 0) {
-            setPredictionError('Weight must be a valid positive number.');
-            return false;
-        }
-        if (!caloriesIntake || isNaN(parseInt(caloriesIntake)) || parseInt(caloriesIntake) <= 0) {
-            setPredictionError('Daily Calorie Intake must be a valid positive number.');
-            return false;
-        }
+    // --- Existing Validations (Basic checks for empty/invalid input) ---
+    if (!name.trim()) {
+        setPredictionError('Full Name is required.');
+        return false;
+    }
+    if (!mobile.trim()) {
+        setPredictionError('Mobile Number is required.');
+        return false;
+    }
+    if (!/^\d+$/.test(mobile.trim())) {
+        setPredictionError('Mobile Number should only contain digits.');
+        return false;
+    }
+    if (!email.trim()) {
+        setPredictionError('Email is required.');
+        return false;
+    }
 
-        setPredictionError(''); // Clear any previous errors
-        return true;
-    };
+    // --- Age Validation ---
+    const ageNum = parseInt(age);
+    if (!age || isNaN(ageNum) || ageNum <= 0) {
+        setPredictionError('Age must be a valid positive number.');
+        return false;
+    }
+    if (ageNum < 3) {
+        setPredictionError("How are you even typing?!?💀");
+        return false;
+    }
+    if (ageNum > 130) {
+        setPredictionError("Bro, you're not that old!");
+        return false;
+    }
+
+    if (!gender) {
+        setPredictionError('Gender is required.');
+        return false;
+    }
+
+    // --- Height Validation ---
+    const heightNum = parseFloat(heightValue);
+    if (!heightValue || isNaN(heightNum) || heightNum <= 0) {
+        setPredictionError('Height must be a valid positive number.');
+        return false;
+    }
+
+    let heightInCm;
+    if (heightUnit === 'cm') {
+        heightInCm = heightNum;
+    } else if (heightUnit === 'inches') {
+        heightInCm = heightNum * 2.54;
+    } else if (heightUnit === 'feet') {
+        heightInCm = heightNum * 30.48;
+    }
+
+    if (heightInCm < 30) {
+        setPredictionError("An elf?!");
+        return false;
+    }
+    if (heightInCm > 250) {
+        setPredictionError("Burj Khalifa?");
+        return false;
+    }
+
+    // --- Weight Validation ---
+    const weightNum = parseFloat(weightValue);
+    if (!weightValue || isNaN(weightNum) || weightNum <= 0) {
+        setPredictionError('Weight must be a valid positive number.');
+        return false;
+    }
+
+    let weightInKg;
+    if (weightUnit === 'kg') {
+        weightInKg = weightNum;
+    } else if (weightUnit === 'lbs') {
+        weightInKg = weightNum * 0.453592;
+    }
+
+    if (weightInKg < 10) { // Very low weight
+        setPredictionError("Are you sure you're not a feather?");
+        return false;
+    }
+    if (weightInKg > 500) { // Very high weight
+        setPredictionError("How fat are you?!?");
+        return false;
+    }
+
+    if (!caloriesIntake || isNaN(parseInt(caloriesIntake)) || parseInt(caloriesIntake) <= 0) {
+        setPredictionError('Daily Calorie Intake must be a valid positive number.');
+        return false;
+    }
+
+    setPredictionError(''); // Clear any previous errors if all checks pass
+    return true;
+};
 
     const handleInitialSubmit = async (e) => {
         e.preventDefault();
