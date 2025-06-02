@@ -3,8 +3,9 @@
 import React, { useState, useEffect } from 'react';
 import './CalorieEstimation.css';
 
-// Define the backend API URL. Use your actual backend URL if different from localhost.
-const API_BASE_URL = 'http://localhost:8000'; // Make sure this matches your uvicorn host and port
+// Define the backend API URL. Use your actual AWS Public IP.
+// IMPORTANT: Replace 'http://13.229.250.121:8000' with your actual AWS Fargate Public IP if it changes.
+const API_BASE_URL = 'http://13.229.250.121:8000'; 
 
 function CalorieEstimation() {
     const [loading, setLoading] = useState(false);
@@ -39,7 +40,7 @@ function CalorieEstimation() {
         formData.append('file', file); // 'file' must match the parameter name in your FastAPI endpoint (@app.post("/classify_dish", file: UploadFile = File(...)))
 
         try {
-            const response = await fetch(`${API_BASE_URL}/classify_dish`, {
+            const response = await fetch(`${API_BASE_URL}/classify_dish`, { // Updated URL
                 method: 'POST',
                 body: formData,
             });

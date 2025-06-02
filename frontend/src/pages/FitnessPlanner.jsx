@@ -3,6 +3,9 @@ import './FitnessPlanner.css'; // Assuming this file exists and contains the sty
 import { v4 as uuidv4 } from 'uuid'; // Import uuid library for session_id
 
 function FitnessPlanner() {
+    // Hardcoded Backend Base URL (replace with your actual AWS Public IP)
+    const BACKEND_BASE_URL = "http://13.229.250.121:8000";
+
     const [submitted, setSubmitted] = useState(false); // True after initial exercise prediction
     const [sessionId, setSessionId] = useState(''); // State to store the session ID
     const [exercisePlan, setExercisePlan] = useState(null); // State for exercise predictions
@@ -190,7 +193,7 @@ function FitnessPlanner() {
         };
 
         try {
-            const response = await fetch("http://localhost:8000/predict_exercise", {
+            const response = await fetch(`${BACKEND_BASE_URL}/predict_exercise`, { // Updated URL
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -225,7 +228,7 @@ function FitnessPlanner() {
         };
 
         try {
-            const response = await fetch("http://localhost:8000/predict_diet", {
+            const response = await fetch(`${BACKEND_BASE_URL}/predict_diet`, { // Updated URL
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -259,7 +262,7 @@ function FitnessPlanner() {
                 phone: formData.mobile,
             };
 
-            const response = await fetch("http://localhost:8000/generate_report", {
+            const response = await fetch(`${BACKEND_BASE_URL}/generate_report`, { // Updated URL
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -298,7 +301,7 @@ function FitnessPlanner() {
 
     const handleChange = (e) => {
         const { name, value } = e.target;
-        
+
         let newValue = value;
         if (name === 'mobile') {
             // Filter out non-digit characters
