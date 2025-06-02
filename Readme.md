@@ -17,6 +17,6 @@
 
 ### To run docker
 - To execute a dockerfile
-'docker build -t fitness-app-backend .'
+'docker build -t vitafit-backend .'
 - To run the container
-'docker run -d -p 8000:8000 --name fitness-app-backend --env MONGODB_URI="mongodb+srv://VFManager:asdf12345@main.tudbo.mongodb.net/?retryWrites=true&w=majority&appName=Main" fitness-app-backend'
+'docker run -d -p 8000:8000 --name vitafit-backend --env MONGODB_URI="mongodb+srv://VFManager:asdf12345@main.tudbo.mongodb.net/?retryWrites=true&w=majority&appName=Main" vitafit-backend'
