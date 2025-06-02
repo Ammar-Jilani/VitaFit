@@ -1,6 +1,6 @@
 # Use an official Python runtime as a parent image
 # We choose a slim version for smaller image size
-FROM python:3.11-slim-buster
+FROM --platform=linux/arm64 python:3.11-slim-buster
 
 # Install system dependencies required by OpenCV (and therefore Ultralytics)
 RUN apt-get update && \
