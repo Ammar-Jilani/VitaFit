@@ -4,7 +4,7 @@ import os
 import io
 from PIL import Image
 from typing import List, Dict, Union, Any, Optional
-from ultralytics import YOLO # Ensure you have 'ultralytics' installed (pip install ultralytics)
+from ultralytics import YOLO # type: ignore
 from pydantic import BaseModel # You'll need pydantic if you don't have it (pip install pydantic)
 
 
