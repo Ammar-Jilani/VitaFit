@@ -5,7 +5,7 @@ import './CalorieEstimation.css';
 
 // Define the backend API URL. Use your actual AWS Public IP.
 // IMPORTANT: Replace 'http://13.229.250.121:8000' with your actual AWS Fargate Public IP if it changes.
-const API_BASE_URL = 'http://13.229.250.121:8000'; 
+const API_BASE_URL = 'http://localhost:8000'; 
 
 function CalorieEstimation() {
     const [loading, setLoading] = useState(false);

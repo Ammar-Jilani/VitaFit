@@ -25,3 +25,8 @@ class ReportRequest(BaseModel):
 
 class DietPlanRequest(BaseModel):
     session_id: str = Field(..., description="Session ID to retrieve previous exercise predictions and user data.")
+
+# --- NEW: Model for AI Chat Requests ---
+class ChatRequest(BaseModel):
+    session_id: str
+    message: str # This field will be used for both overview and chat queries

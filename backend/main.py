@@ -3,26 +3,29 @@ import os
 import uuid
 import datetime
 from typing import Optional, Any
-from fastapi import FastAPI, HTTPException, Request, Response, UploadFile, File # Added UploadFile, File
+from fastapi import FastAPI, HTTPException, Request, Response, UploadFile, File
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
-from PIL import Image # For handling image files
-import io # For handling image bytes
+from PIL import Image
+import io
 
 # Import from your new modules
-from config.settings import DB_NAME, IMAGE_CLASSIFIER_MODELS_PATH # Added IMAGE_CLASSIFIER_MODELS_PATH
+from config.settings import DB_NAME, IMAGE_CLASSIFIER_MODELS_PATH 
 from database.mongodb_client import connect_to_mongodb, close_mongodb_connection, get_db_collection
-from models.request_models import UserInput, UserPersonalDetails, ReportRequest, DietPlanRequest
+from models.request_models import UserInput, UserPersonalDetails, ReportRequest, DietPlanRequest, ChatRequest # <-- NEW: Add ChatRequest model
 from services.exercise_service import load_exercise_models, predict_exercise
 from services.diet_service import load_diet_models, predict_diet
-from services.report_service import generate_report as generate_pdf_report # Renamed to avoid conflict
-from models.Image_Classifier_Model.image_classifier_logic import ImageClassifier, DetectionResponse # Import the new class and models
-from utils.helpers import convert_numpy_types # To convert numpy types for JSON/MongoDB storage
+from services.report_service import generate_report as generate_pdf_report
+from models.Image_Classifier_Model.image_classifier_logic import ImageClassifier, DetectionResponse
+from utils.helpers import convert_numpy_types
+
+# --- NEW: Import RAG Service ---
+from services.rag_service import RAGAssistant, load_rag_knowledge_base, initialize_rag_components 
 
 # --- FastAPI App Initialization ---
 app = FastAPI(
     title="Fitness and Diet Prediction API",
-    description="API for predicting exercise and diet plans based on user data, and dish image classification.", # Updated description
+    description="API for predicting exercise and diet plans based on user data, and dish image classification, and AI-powered health overview.", # Updated description
     version="1.0.0"
 )
 
@@ -35,8 +38,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- Global variable for Image Classifier ---
+# --- Global variables for ML models and RAG ---
 image_classifier_model: Optional[ImageClassifier] = None
+rag_assistant_instance: Optional[RAGAssistant] = None # <-- NEW: Global for RAG assistant
 
 # --- Startup Events ---
 @app.on_event("startup")
@@ -45,11 +49,12 @@ async def startup_all():
     Handles all necessary startup procedures:
     1. Connect to MongoDB.
     2. Load Machine Learning Models (Exercise, Diet, Image Classifier).
+    3. Initialize RAG components (Knowledge Base, LLM, Retriever).
     """
     # 1. Connect to MongoDB
     try:
         await connect_to_mongodb()
-        print("Connected to MongoDB database:", DB_NAME) # Added print for confirmation
+        print("Connected to MongoDB database:", DB_NAME)
     except Exception as e:
         print(f"Application startup failed due to MongoDB connection error: {e}")
         raise HTTPException(status_code=500, detail=f"Server startup error: Failed to connect to MongoDB. {e}")
@@ -57,38 +62,54 @@ async def startup_all():
     # 2. Load Machine Learning Models
     try:
         await load_exercise_models()
-        print("Exercise models loaded successfully!") # Added print
+        print("Exercise models loaded successfully!")
         await load_diet_models()
-        print("Diet models loaded successfully!") # Added print
+        print("Diet models loaded successfully!")
         
-        # Load Image Classifier Model
         global image_classifier_model
-        # Use os.path.join with the base path and the model file name
-        yolo_model_file_name = "image_classification.pt" # Ensure this matches your file name
+        yolo_model_file_name = "image_classification.pt"
         full_yolo_model_path = os.path.join(IMAGE_CLASSIFIER_MODELS_PATH, yolo_model_file_name)
         
         try:
             image_classifier_model = ImageClassifier(model_path=full_yolo_model_path)
-            if image_classifier_model.yolo_model is None: # Check if model loading failed inside the class
+            if image_classifier_model.yolo_model is None:
                 raise RuntimeError("YOLO model did not load correctly within ImageClassifier.")
             print(f"Image classifier model loaded successfully from {full_yolo_model_path}!")
         except Exception as e:
             print(f"Error loading image classifier model: {e}")
-            image_classifier_model = None # Set to None if loading fails, but don't stop startup
+            image_classifier_model = None
             print("Warning: Image classification endpoint will not be available.")
 
     except HTTPException as e:
-        raise e # Re-raise HTTPExceptions from model loading
+        raise e
     except Exception as e:
         print(f"An unexpected error occurred during ML model loading: {e}")
         raise HTTPException(status_code=500, detail=f"Server startup error: Failed to load ML models. {e}")
+
+    # --- NEW: 3. Initialize RAG Components ---
+    global rag_assistant_instance
+    try:
+        # Load the knowledge base (this might involve processing documents and indexing)
+        # You'll define how load_rag_knowledge_base works in services/rag_service.py
+        # It could return a vector store or simply prepare it for initialization
+        knowledge_base = await load_rag_knowledge_base() 
+        
+        # Initialize the RAGAssistant with necessary components
+        # You'll define initialize_rag_components in services/rag_service.py
+        rag_assistant_instance = await initialize_rag_components(knowledge_base=knowledge_base)
+        
+        print("RAG Assistant components loaded successfully!")
+    except Exception as e:
+        print(f"Error initializing RAG Assistant: {e}")
+        rag_assistant_instance = None
+        print("Warning: AI Health Overview endpoint will not be available.")
 
 
 @app.on_event("shutdown")
 async def shutdown_all():
     """Closes all necessary connections on application shutdown."""
     await close_mongodb_connection()
-    print("Disconnected from MongoDB.") # Added print for confirmation
+    print("Disconnected from MongoDB.")
 
 # --- API Endpoints ---
 
@@ -99,29 +120,21 @@ async def read_root():
 @app.post("/predict_exercise")
 async def predict_exercise_plan_endpoint(user_input: UserInput):
     predictions_collection = get_db_collection("predictions")
-
-    # 1. Perform Exercise Predictions
     exercise_predictions = predict_exercise(user_input)
-
-    # 2. Store Predictions in MongoDB
     prediction_record = {
         "session_id": user_input.session_id,
         "timestamp": datetime.datetime.utcnow(),
         "raw_user_input": convert_numpy_types(user_input.dict()),
-        "processed_features": None, # Will be filled by preprocess_user_data_for_exercise inside predict_exercise or similar
+        "processed_features": None,
         "exercise_predictions": convert_numpy_types(exercise_predictions),
         "diet_predictions": {}
     }
-    
-    # Temporarily run preprocessing again to get processed_features for storage if not returned by predict_exercise
-    # A better design would be for predict_exercise to return both predictions and processed_features
-    from services.exercise_service import preprocess_user_data_for_exercise, label_encoders as exercise_label_encoders # Import for temporary use
+    from services.exercise_service import preprocess_user_data_for_exercise, label_encoders as exercise_label_encoders
     if exercise_label_encoders is None:
          raise HTTPException(status_code=500, detail="Exercise label encoders not loaded during initial startup.")
     
     _, processed_core_features = preprocess_user_data_for_exercise(user_input)
     prediction_record["processed_features"] = convert_numpy_types(processed_core_features)
-
 
     try:
         predictions_collection.update_one(
@@ -144,7 +157,6 @@ async def predict_exercise_plan_endpoint(user_input: UserInput):
 @app.post("/predict_diet")
 async def predict_diet_plan_endpoint(diet_request: DietPlanRequest):
     predictions_collection = get_db_collection("predictions")
-
     prediction_record = predictions_collection.find_one({"session_id": diet_request.session_id})
 
     if not prediction_record:
@@ -153,7 +165,6 @@ async def predict_diet_plan_endpoint(diet_request: DietPlanRequest):
     processed_core_features = prediction_record.get('processed_features', {})
     exercise_predictions = prediction_record.get('exercise_predictions', {})
     raw_user_input = prediction_record.get('raw_user_input', {})
-
 
     if not processed_core_features or not exercise_predictions:
         raise HTTPException(status_code=500, detail="Incomplete stored data for session. Cannot generate diet plan.")
@@ -184,11 +195,8 @@ async def predict_diet_plan_endpoint(diet_request: DietPlanRequest):
 async def generate_report_endpoint(report_request: ReportRequest):
     return await generate_pdf_report(report_request)
 
-@app.post("/classify_dish", response_model=DetectionResponse) # New endpoint for image classification
+@app.post("/classify_dish", response_model=DetectionResponse)
 async def classify_dish_endpoint(file: UploadFile = File(...)):
-    """
-    Upload an image to detect dishes and get their information using the YOLOv8 model.
-    """
     if image_classifier_model is None:
         raise HTTPException(status_code=500, detail="Dish detection model is not loaded or available.")
 
@@ -201,3 +209,41 @@ async def classify_dish_endpoint(file: UploadFile = File(...)):
         return detection_response
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Dish detection failed: {str(e)}")
+
+# --- NEW: RAG Endpoints ---
+
+@app.post("/ai/overview")
+async def get_ai_overview_endpoint(report_content: ChatRequest): # Assuming ChatRequest can hold the report text
+    """
+    Generates an initial AI-powered overview based on the user's fitness and diet report.
+    """
+    if rag_assistant_instance is None:
+        raise HTTPException(status_code=500, detail="AI Health Overview service is not loaded or available.")
+    
+    # In a real scenario, you'd load the report content here.
+    # For now, assuming report_content.message holds the full report.
+    # You might pass the user_input or session_id to retrieve the stored report data instead.
+    user_report_text = report_content.message 
+
+    try:
+        response = await rag_assistant_instance.get_initial_overview(user_report_text)
+        return {"response": response}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate AI overview: {str(e)}")
+
+@app.post("/ai/chat")
+async def ai_chat_endpoint(chat_request: ChatRequest):
+    """
+    Handles follow-up questions within the AI chat interface.
+    """
+    if rag_assistant_instance is None:
+        raise HTTPException(status_code=500, detail="AI Health Overview service is not loaded or available.")
+    
+    user_question = chat_request.message
+    session_id = chat_request.session_id # Assuming you want to maintain session context
+
+    try:
+        response = await rag_assistant_instance.chat_with_ai(user_question, session_id)
+        return {"response": response}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to process AI chat message: {str(e)}")
