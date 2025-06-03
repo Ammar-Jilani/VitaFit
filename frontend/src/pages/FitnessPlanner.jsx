@@ -6,7 +6,7 @@ import AIChat from '../components/AIChat'; // Import the new AI Chat component
 
 function FitnessPlanner() {
     // Hardcoded Backend Base URL (replace with your actual AWS Public IP)
-    const BACKEND_BASE_URL = "http://localhost:8000";
+    const BACKEND_BASE_URL = "http://13.214.177.16:8000";
 
     const [submitted, setSubmitted] = useState(false); // True after initial exercise prediction
     const [sessionId, setSessionId] = useState(''); // State to store the session ID
