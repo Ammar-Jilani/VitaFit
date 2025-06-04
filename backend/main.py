@@ -2,8 +2,9 @@
 import os
 import uuid
 import datetime
+import json # Import json for stringifying MongoDB data
 from typing import Optional, Any
-from fastapi import FastAPI, HTTPException, Request, Response, UploadFile, File
+from fastapi import FastAPI, HTTPException, Request, Response, UploadFile, File, Depends
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image
@@ -36,6 +37,7 @@ app.add_middleware(
 
 image_classifier_model: Optional[ImageClassifier] = None
 rag_assistant_instance: Optional[RAGAssistant] = None
+knowledge_base_instance: Any = None 
 
 # --- Startup Events ---
 @app.on_event("startup")
@@ -72,7 +74,7 @@ async def startup_all():
             print(f"Image classifier model loaded successfully from {full_yolo_model_path}!")
         except Exception as e:
             print(f"Error loading image classifier model: {e}")
-            image_classifier_model = None
+            image_classifier_model = None 
             print("Warning: Image classification endpoint will not be available.")
 
     except HTTPException as e:
@@ -82,17 +84,16 @@ async def startup_all():
         raise HTTPException(status_code=500, detail=f"Server startup error: Failed to load ML models. {e}")
 
     # --- NEW: 3. Initialize RAG Components ---
-    global rag_assistant_instance
+    global knowledge_base_instance, rag_assistant_instance 
     try:
-        knowledge_base = await load_rag_knowledge_base() 
-        
-        rag_assistant_instance = await initialize_rag_components(knowledge_base=knowledge_base)
-        
+        knowledge_base_instance = await load_rag_knowledge_base() 
+        rag_assistant_instance = await initialize_rag_components(knowledge_base=knowledge_base_instance)
         print("RAG Assistant components loaded successfully!")
     except Exception as e:
-        print(f"Error initializing RAG Assistant: {e}")
-        rag_assistant_instance = None
-        print("Warning: AI Health Overview endpoint will not be available.")
+        print(f"FATAL ERROR: Error initializing RAG Assistant: {e}")
+        rag_assistant_instance = None 
+        knowledge_base_instance = None 
+        raise HTTPException(status_code=500, detail=f"Server startup error: Failed to initialize AI services. {e}")
 
 
 @app.on_event("shutdown")
@@ -100,6 +101,12 @@ async def shutdown_all():
     """Closes all necessary connections on application shutdown."""
     await close_mongodb_connection()
     print("Disconnected from MongoDB.")
+
+# --- Dependency to get the RAG Assistant instance ---
+async def get_rag_assistant_dependency():
+    if rag_assistant_instance is None:
+        raise HTTPException(status_code=503, detail="AI services are not initialized or failed to load during startup.")
+    return rag_assistant_instance
 
 # --- API Endpoints ---
 
@@ -121,7 +128,7 @@ async def predict_exercise_plan_endpoint(user_input: UserInput):
     }
     from services.exercise_service import preprocess_user_data_for_exercise, label_encoders as exercise_label_encoders
     if exercise_label_encoders is None:
-         raise HTTPException(status_code=500, detail="Exercise label encoders not loaded during initial startup.")
+          raise HTTPException(status_code=500, detail="Exercise label encoders not loaded during initial startup.")
     
     _, processed_core_features = preprocess_user_data_for_exercise(user_input)
     prediction_record["processed_features"] = convert_numpy_types(processed_core_features)
@@ -201,31 +208,44 @@ async def classify_dish_endpoint(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=f"Dish detection failed: {str(e)}")
 
 @app.post("/ai/overview")
-async def get_ai_overview_endpoint(report_content: ChatRequest):
-    if rag_assistant_instance is None:
-        raise HTTPException(status_code=500, detail="AI Health Overview service is not loaded or available.")
-    
-    user_report_text = report_content.message 
+async def get_ai_overview_endpoint(chat_request: ChatRequest, rag: RAGAssistant = Depends(get_rag_assistant_dependency)):
+    predictions_collection = get_db_collection("predictions")
+    session_id = chat_request.session_id # Get session_id from the request
+
+    # Fetch user's data from MongoDB
+    user_data_record = predictions_collection.find_one({"session_id": session_id})
+
+    if not user_data_record:
+        raise HTTPException(status_code=404, detail=f"No fitness data found for session ID: {session_id}. Please submit your personal details and generate a plan first.")
+
+    # Format the user data for the LLM
+    # Exclude MongoDB's _id and timestamp for cleaner input to LLM
+    user_data_for_llm = {
+        k: v for k, v in user_data_record.items() 
+        if k not in ["_id", "timestamp", "processed_features"]
+    }
+    # Convert to JSON string for the LLM
+    user_data_context_str = json.dumps(user_data_for_llm, indent=2)
 
     try:
-        response = await rag_assistant_instance.get_initial_overview(user_report_text)
+        # Pass the formatted user data as context to the RAG assistant
+        response = await rag.get_initial_overview(user_data_context_str)
         return {"response": response}
     except Exception as e:
+        print(f"Error generating AI overview for session {session_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to generate AI overview: {str(e)}")
 
 @app.post("/ai/chat")
-async def ai_chat_endpoint(chat_request: ChatRequest):
+async def ai_chat_endpoint(chat_request: ChatRequest, rag: RAGAssistant = Depends(get_rag_assistant_dependency)):
     """
     Handles follow-up questions within the AI chat interface.
     """
-    if rag_assistant_instance is None:
-        raise HTTPException(status_code=500, detail="AI Health Overview service is not loaded or available.")
-    
     user_question = chat_request.message
-    session_id = chat_request.session_id
+    session_id = chat_request.session_id # Session ID is also relevant for chat context if needed later
 
     try:
-        response = await rag_assistant_instance.chat_with_ai(user_question, session_id)
+        response = await rag.chat_with_ai(user_question, session_id)
         return {"response": response}
     except Exception as e:
+        print(f"Error processing AI chat message for session {session_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to process AI chat message: {str(e)}")
