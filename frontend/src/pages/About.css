@@ -41,7 +41,7 @@
   line-height: 1.7;
 }
 
-/* Simple fade-in animation */
+
 @keyframes fadeIn {
   from {
     opacity: 0;

@@ -2,20 +2,22 @@ import os
 from typing import Optional, List, Dict, Any
 import re 
 
-# --- RAG Libraries ---
+
 from langchain_chroma import Chroma
 from langchain.chains import RetrievalQA
 from langchain.prompts import PromptTemplate
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import TextLoader, PyPDFLoader
 
-# Hugging Face specific imports
+
 from langchain_community.llms import HuggingFacePipeline
 from langchain_community.embeddings import HuggingFaceEmbeddings
-from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline, set_seed, GenerationConfig
+from transformers import AutoTokenizer, AutoModelForCausalLM
+from transformers.trainer_utils import set_seed
+from transformers.pipelines import pipeline
 import torch
 
-# --- Import settings ---
+
 from config.settings import (
     KNOWLEDGE_BASE_DATA_DIR,
     VECTOR_DB_PERSIST_PATH,
@@ -30,9 +32,6 @@ class RAGAssistant:
         self.off_topic_classifier_llm = off_topic_classifier_llm
 
     async def get_initial_overview(self, user_report_text: str) -> str:
-        """
-        Generates the initial AI overview based on the provided user report text.
-        """
         if not self.llm_chain:
             raise RuntimeError("RAG LLM chain is not initialized.")
 
@@ -40,9 +39,6 @@ class RAGAssistant:
         return response['result']
 
     async def chat_with_ai(self, user_question: str, session_id: str) -> str:
-        """
-        Handles follow-up questions from the user in the AI chat interface.
-        """
         if not self.llm_chain:
             raise RuntimeError("RAG LLM chain is not initialized.")
 
@@ -128,9 +124,6 @@ class RAGAssistant:
 
 
 async def load_rag_knowledge_base():
-    """
-    Loads documents from the data directory and initializes/persists the vector store.
-    """
     print(f"Loading documents from {KNOWLEDGE_BASE_DATA_DIR}...")
     documents = []
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
@@ -173,7 +166,6 @@ async def load_rag_knowledge_base():
     else:
         print(f"No existing vector store found. Creating new one at {VECTOR_DB_PERSIST_PATH}...")
         vectorstore = Chroma.from_documents(documents, embeddings, persist_directory=VECTOR_DB_PERSIST_PATH)
-        vectorstore.persist()
         print("New vector store created and persisted.")
 
     print("Vector store initialized.")
@@ -181,9 +173,6 @@ async def load_rag_knowledge_base():
 
 
 async def initialize_rag_components(knowledge_base: Any) -> RAGAssistant:
-    """
-    Initializes the LLM (Hugging Face model) and the RetrievalQA chain.
-    """
     print(f"Loading Hugging Face LLM '{LLM_MODEL_NAME}'...")
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -195,8 +184,8 @@ async def initialize_rag_components(knowledge_base: Any) -> RAGAssistant:
     tokenizer_rag = AutoTokenizer.from_pretrained(LLM_MODEL_NAME, token=HF_TOKEN, trust_remote_code=True)
     model_rag = AutoModelForCausalLM.from_pretrained(
         LLM_MODEL_NAME,
-        torch_dtype=torch.float32, # Ensure float32 for CPU stability
-        device_map="auto" if device == "cuda" else None, # auto for GPU, None for CPU
+        torch_dtype=torch.float32,
+        device_map="auto" if device == "cuda" else None,
         token=HF_TOKEN,
         trust_remote_code=True
     )
@@ -218,9 +207,6 @@ async def initialize_rag_components(knowledge_base: Any) -> RAGAssistant:
     llm = HuggingFacePipeline(pipeline=pipe_rag)
     print(f"LLM '{LLM_MODEL_NAME}' loaded using HuggingFacePipeline with return_full_text=False.")
 
-    # --- SIMPLIFIED RAG PROMPT HANDLING ---
-    # Moved the prompt directly into the RetrievalQA.from_chain_type call
-    # And simplified the prompt text for initial testing
     rag_template = """
     You are VitaFit AI Health Assistant. Answer the following question based on the context provided.
     
@@ -241,11 +227,9 @@ async def initialize_rag_components(knowledge_base: Any) -> RAGAssistant:
         chain_type="stuff",
         retriever=knowledge_base.as_retriever(search_kwargs={"k": 3}),
         return_source_documents=False,
-        # *** CRITICAL CHANGE: Pass the prompt directly here. Removed chain_type_kwargs for now. ***
         chain_type_kwargs={"prompt": RAG_PROMPT} 
     )
 
-    # --- Load components for Off-topic classifier LLM Pipeline ---
     tokenizer_classifier = AutoTokenizer.from_pretrained(LLM_MODEL_NAME, token=HF_TOKEN, trust_remote_code=True)
     model_classifier = AutoModelForCausalLM.from_pretrained(
         LLM_MODEL_NAME,

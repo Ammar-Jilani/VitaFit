@@ -20,32 +20,30 @@
         justify-content: center;
         gap: 2rem;
         position: relative;
-        overflow-y: auto; /* Allow scrolling if content overflows */
+        overflow-y: auto;
         padding: 2rem;
     }
     .main-content-wrapper{
-        background-color: rgba(0, 0, 0, 0.7); /* Dark semi-transparent overlay */
+        background-color: rgba(0, 0, 0, 0.7);
         padding: 2rem;
         border-radius: 12px;
         width: 100%;
-        max-width: 1400px; /* Increased max-width to accommodate side-by-side content */
-        color: white; /* Ensure all general text within the overlay is white */
+        max-width: 1400px;
+        color: white;
         animation: fadeIn 1.2s ease;
         gap: 2rem;
-        /* These flex properties are for the main layout within the overlay */
         display: flex;
-        flex-direction: column; /* Stack sections vertically by default (e.g., form then reports/chat) */
-        align-items: center; /* Center items horizontally in column layout */
+        flex-direction: column; 
+        align-items: center;
         justify-content: center;
     }
 
-    /* Form styles */
     .fitness-form {
         display: flex;
         flex-direction: column;
         gap: 1rem;
-        width: 100%; /* Ensure form takes full width of overlay */
-        max-width: 500px; /* Constrain form width for better appearance */
+        width: 100%; 
+        max-width: 500px; 
     }
 
     .fitness-form input,
@@ -55,30 +53,27 @@
         border-radius: 8px;
         border: 1px solid rgba(255, 255, 255, 0.3);
         outline: none;
-        background-color: rgba(255, 255, 255, 0.1); /* Semi-transparent background for inputs */
-        color: white; /* Set input text color to white */
+        background-color: rgba(255, 255, 255, 0.1);
+        color: white;
         font-size: 1rem;
         transition: background-color 0.3s ease, border-color 0.3s ease;
     }
 
-    /* Ensure placeholder text is visible */
     .fitness-form input::placeholder,
     .fitness-form textarea::placeholder {
-        color: rgba(255, 255, 255, 0.6); /* Lighter white for placeholders */
+        color: rgba(255, 255, 255, 0.6);
     }
 
-    /* Keep focus styles for better feedback */
     .fitness-form input:focus,
     .fitness-form textarea:focus,
     .fitness-form select:focus {
         background-color: rgba(255, 255, 255, 0.15);
-        border-color: #f97316; /* Orange highlight on focus */
+        border-color: #f97316;
     }
 
-    /* Style for the gender select to ensure white text */
     .fitness-form select option {
-        background-color: rgba(0, 0, 0, 0.8); /* Darker background for options for contrast */
-        color: white; /* White text for options */
+        background-color: rgba(0, 0, 0, 0.8); 
+        color: white; 
     }
 
     .fade-text {
@@ -89,7 +84,7 @@
     }
 
     .animated-btn {
-        background: #f97316; /* Orange button background */
+        background: #f97316;
         color: white;
         padding: 0.75rem 1.5rem;
         border: none;
@@ -102,116 +97,108 @@
 
     .animated-btn:hover {
         transform: scale(1.05);
-        background-color: #fb923c; /* Lighter orange on hover */
+        background-color: #fb923c;
     }
 
-    /* --- Height/Weight Input with Unit Selection --- */
     .input-group {
         display: flex;
-        gap: 10px; /* Space between input and select */
+        gap: 10px; 
         align-items: center;
-        width: 100%; /* Ensure it takes full width */
-        margin-bottom: 1rem; /* Consistent spacing with other inputs */
+        width: 100%; 
+        margin-bottom: 1rem; 
     }
 
     .input-group input[type="number"],
     .input-group .unit-select {
-        flex: 1; /* Allows them to grow and fill space */
-        padding: 0.8rem; /* Match other input padding */
-        border: 1px solid rgba(255, 255, 255, 0.3); /* Match other input border */
-        border-radius: 8px; /* Match other input border radius */
-        font-size: 1rem; /* Match other input font size */
-        background-color: rgba(255, 255, 255, 0.1); /* Match other input background */
-        color: white; /* Ensure text is white */
+        flex: 1; 
+        padding: 0.8rem; 
+        border: 1px solid rgba(255, 255, 255, 0.3); 
+        border-radius: 8px; 
+        font-size: 1rem; 
+        background-color: rgba(255, 255, 255, 0.1); 
+        color: white; 
     }
 
     .input-group .unit-select {
-        flex: 0 0 80px; /* Fixed width for the select dropdown */
+        flex: 0 0 80px;
         cursor: pointer;
-        -webkit-appearance: none; /* Remove default arrow on some browsers */
+        -webkit-appearance: none;
         -moz-appearance: none;
         appearance: none;
-        /* Custom white arrow SVG for select dropdown */
         background-repeat: no-repeat;
         background-position: right 8px center;
         background-size: 12px;
-        padding-right: 25px; /* Add padding to prevent text overlapping the arrow */
+        padding-right: 25px; 
     }
 
-    /* Override the default margin-bottom for inputs within .input-group to avoid double spacing */
     .input-group input,
     .input-group select {
         margin-bottom: 0;
     }
 
-    /* --- BMI Display Styles --- */
     .bmi-display {
         padding: 0.8rem;
         border-radius: 8px;
-        border: 1px solid #f97316; /* Highlight border */
-        background-color: rgba(249, 115, 22, 0.2); /* Slightly orange tint */
+        border: 1px solid #f97316; 
+        background-color: rgba(249, 115, 22, 0.2);
         color: white;
         font-size: 1rem;
-        font-weight: bold; /* Make the BMI value stand out */
+        font-weight: bold;
         text-align: center;
-        display: flex; /* Use flex to align content within */
+        display: flex; 
         align-items: center;
         justify-content: center;
-        gap: 0.5rem; /* Space between label and value */
-        margin-bottom: 1rem; /* Consistent spacing */
-        min-height: 44px; /* Ensure it matches input height */
+        gap: 0.5rem; 
+        margin-bottom: 1rem; 
+        min-height: 44px; 
     }
 
     .bmi-display strong {
-        color: #f97316; /* Color the actual BMI value */
+        color: #f97316; 
     }
 
-    /* --- Main wrapper for all post-submission content --- */
     .report-and-chat-container {
         display: flex;
-        flex-direction: column; /* Default to column for small screens */
-        gap: 30px; /* Space between reports section and chat section */
+        flex-direction: column; 
+        gap: 30px;
         justify-content: center;
-        align-items: center; /* Center items when stacked */
+        align-items: center;
         margin-top: 2rem;
         width: 100%;
     }
     .report-container-wrapper{
         display: flex;
-        flex-direction: column; /* Default to column for small screens */
-        gap: 30px; /* Space between reports section and chat section */
+        flex-direction: column;
+        gap: 30px;
         justify-content: center;
-        align-items: center; /* Center items when stacked */
+        align-items: center;
         width: 100%;
     }
-    /* Container for Exercise and Diet Reports when side-by-side */
-    .reports-container { /* This only contains the two main reports (Exercise & Diet) */
+
+    .reports-container {
         display: flex;
         padding: 2rem;
         gap: 2rem;
         justify-content: center;
-        flex-wrap: wrap; /* Allow wrapping of the two reports on smaller screens */
-        width: 100%; /* Take full width of reports-content-wrapper */
+        flex-wrap: wrap; 
+        width: 100%;
     }
 
-    /* Shared report style */
     .recommendation-report {
-        flex: 1 1 48%; /* Allows them to grow and shrink, with a base of 48% for gap */
+        flex: 1 1 48%;
         background: rgba(255, 255, 255, 0.1);
         padding: 1.5rem;
         border-radius: 10px;
         color: white;
         animation: fadeIn 1.2s ease-in-out;
-        max-width: 580px; /* Limit individual report width to prevent excessive stretching */
-        box-sizing: border-box; /* Include padding in element's total width/height */
+        max-width: 580px; 
+        box-sizing: border-box; 
     }
 
-    /* Diet plan specific style */
     .diet-plan {
         animation: slideInFromRight 0.8s ease forwards;
     }
 
-    /* Table style */
     .fitness-table {
         width: 100%;
         margin-top: 1rem;
@@ -219,15 +206,15 @@
         color: #fff;
         text-align: center;
         box-sizing: border-box;
-        table-layout: fixed; /* This helps prevent content from pushing columns out */
+        table-layout: fixed;
     }
 
     .fitness-table th,
     .fitness-table td {
-        padding: 0.75rem 0.5rem; /* Slightly reduced horizontal padding */
+        padding: 0.75rem 0.5rem;
         border: 1px solid rgba(255, 255, 255, 0.2);
         background-color: rgba(255, 255, 255, 0.05);
-        word-wrap: break-word; /* Ensure long words break */
+        word-wrap: break-word;
     }
 
     .fitness-table th {
@@ -235,7 +222,6 @@
         font-weight: bold;
     }
 
-    /* Diet plan animation */
     @keyframes slideInFromRight {
         from {
             opacity: 0;
@@ -247,27 +233,8 @@
         }
     }
 
-    /* Styles for the new "Get Diet Plan" button section */
     .diet-plan-prompt {
         text-align: center;
-        /* Removed margin-top and margin-bottom as gap in parent will handle it */
-        padding: 1.5rem;
-        background: rgba(255, 255, 255, 0.1);
-        border-radius: 10px;
-        width: 100%;
-        max-width: 500px; /* Constrain its width for better appearance */
-        animation: fadeIn 1.2s ease-in-out;
-    }
-
-    .diet-plan-prompt p {
-        margin-bottom: 1rem;
-        font-size: 1.1rem;
-    }
-
-    /* Styles for the final download button section */
-    .final-report-download {
-        text-align: center;
-        /* Removed margin-top as gap in parent will handle it */
         padding: 1.5rem;
         background: rgba(255, 255, 255, 0.1);
         border-radius: 10px;
@@ -276,82 +243,88 @@
         animation: fadeIn 1.2s ease-in-out;
     }
 
-    /* New CSS for AI Chat Section */
-    .ai-chat-section {
-        width: 100%; /* Take full width on smaller screens */
-        max-width: 500px; /* Max width for the chat */
-        /* All other chat styling should come from AIChat.css */
+    .diet-plan-prompt p {
+        margin-bottom: 1rem;
+        font-size: 1.1rem;
     }
 
-    /* --- Media Queries for Responsive Layout --- */
+    .final-report-download {
+        text-align: center;
+        padding: 1.5rem;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 10px;
+        width: 100%;
+        max-width: 500px;
+        animation: fadeIn 1.2s ease-in-out;
+    }
 
-    @media (min-width: 1024px) { /* Adjust breakpoint as needed */
+    .ai-chat-section {
+        width: 100%;
+        max-width: 500px;
+    }
+
+
+    @media (min-width: 1024px) {
         .report-and-chat-container {
-            flex-direction: row; /* Layout side-by-side on larger screens */
+            flex-direction: row;
             justify-content: center;
-            align-items: flex-start; /* Align content to the top */
-            /* No flex-wrap here, as we want a single row for the main two sections */
+            align-items: flex-start;
         }
 
-        /* This wrapper now acts as the left column */
         .reports-content-wrapper {
-            flex: 2; /* Allocate more space to reports content */
-            max-width: none; /* Allow it to grow based on flex, not a fixed max-width here */
-            margin-right: 30px; /* Space between reports and chat */
-            align-items: flex-end; /* Align the *buttons* to the right within the left column, if desired, or center */
-            /* Changed to flex-start if you want everything left-aligned in the left column */
+            flex: 2;
+            max-width: none; 
+            margin-right: 30px; 
+            align-items: flex-end; 
         }
 
 
 
         .ai-chat-section {
-            flex: 1; /* Allocate remaining space to chat */
-            min-width: 400px; /* Ensure chat has a decent minimum width */
-            margin-top: 0; /* Remove top margin when side-by-side */
-        }
+            flex: 1;
+            min-width: 400px; 
+            margin-top: 0; 
         .final-report-download {
-            /* These should be responsive within the reports-content-wrapper */
-            width: 100%; /* They take full width of reports-content-wrapper now */
-            max-width: 500px; /* Still constrain their individual width */
+            width: 100%;
+            max-width: 500px;
             margin-left: 0;
             margin-right: 0;
-            text-align: center; /* Keep their text centered */
+            text-align: center
         }
     }
 
 
-    /* Responsive stacking for .reports-container itself */
     @media (max-width: 768px) {
         .reports-container {
-            flex-direction: column; /* Stack reports vertically on small screens */
+            flex-direction: column;
             align-items: center;
-            gap: 20px; /* Reduce gap slightly for smaller screens */
+            gap: 20px;
         }
 
         .recommendation-report {
             width: 100%;
-            max-width: 100%; /* Allow full width on smaller screens */
-            padding: 1rem; /* Adjusted padding for smaller screens */
+            max-width: 100%; 
+            padding: 1rem;
         }
 
         .diet-plan-prompt,
         .final-report-download {
             width: 100%;
-            max-width: 100%; /* Allow full width on smaller screens */
-            padding: 1rem; /* Adjusted padding */
+            max-width: 100%;
+            padding: 1rem;
         }
 
-        /* .ai-chat-container padding is defined in AIChat.css */
     }
 
     .recommendation-report h2 {
         margin-bottom: 1rem;
-        text-align: center; /* Center headings in reports */
+        text-align: center;
     }
 
     .error-message {
-        color: #ff6347; /* A soft red for error messages */
+        color: #ff6347;
         margin-top: 0.5rem;
         font-weight: bold;
         text-align: center;
     }
+}

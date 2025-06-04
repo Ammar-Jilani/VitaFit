@@ -7,11 +7,10 @@ from fastapi import HTTPException
 from config.settings import DIET_MODELS_PATH
 from utils.helpers import convert_numpy_types, infer_activity_level
 
-# Diet Model Globals
-diet_regressor: Optional[Any] = None # Diet Model
-diet_label_encoders: Optional[Dict[str, Any]] = None # Encoders specifically for Diet Model's categorical inputs
 
-# Define the exact order of features for the diet model
+diet_regressor: Optional[Any] = None
+diet_label_encoders: Optional[Dict[str, Any]] = None
+
 DIET_FEATURE_COLUMNS_ORDER = [
     "age", "gender", "height", "weight", "bmi", "calories_intake",
     "exercise_type", "intensity_level", "frequency_per_week", "activity_level"
@@ -25,7 +24,6 @@ async def load_diet_models():
         diet_regressor = joblib.load(os.path.join(DIET_MODELS_PATH, "diet_model_rf.pkl"))
         loaded_diet_encoders = joblib.load(os.path.join(DIET_MODELS_PATH, "diet_label_encoders.pkl"))
         
-        # Add a more robust check for required encoders if known
         if not isinstance(loaded_diet_encoders, dict):
             print("Warning: diet_label_encoders.pkl is not a dictionary. It might still work if gender is handled differently in diet model.")
         
@@ -70,14 +68,12 @@ def predict_diet(processed_core_features: Dict[str, Any], exercise_predictions: 
         
         diet_gender_raw = raw_user_input['gender'].lower()
 
-        # Re-encode gender specifically for diet model if diet_label_encoders['gender'] exists
         if encoders is not None and 'gender' in encoders and encoders['gender'] is not None:
             try:
                 diet_encoded_gender = encoders['gender'].transform([diet_gender_raw])[0]
             except ValueError:
                 raise HTTPException(status_code=400, detail=f"Invalid gender for diet model: '{diet_gender_raw}'. Must be one of: {list(encoders['gender'].classes_)}")
         else:
-            # Fallback if diet gender encoder is missing (e.g., use the already processed gender, or raise error)
             print("WARNING: Diet model's 'gender' LabelEncoder is missing. Using pre-processed gender from exercise step.")
             diet_encoded_gender = processed_core_features["gender"]
 
@@ -121,7 +117,6 @@ def predict_diet(processed_core_features: Dict[str, Any], exercise_predictions: 
 
     except Exception as e:
         print(f"Warning: Error during diet prediction: {str(e)}")
-        # If diet model isn't fully available/functional, send a specific message to frontend
         if not regressor or not encoders:
             diet_predictions = {"error": "Diet model not fully loaded or available."}
             return diet_predictions

@@ -16,6 +16,7 @@
   margin-bottom: 0.5rem;
   background: linear-gradient(90deg, #f97316, #fb923c);
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
   animation: slideUp 1s ease-out;
   letter-spacing: 1.2px;
@@ -30,7 +31,6 @@
   color: #f3f4f6;
 }
 
-/* Styled label as button */
 .custom-upload {
   display: inline-block;
   background-color: white;
@@ -50,7 +50,6 @@
   transform: scale(1.05);
 }
 
-/* Hide actual file input */
 input[type="file"] {
   display: none;
 }

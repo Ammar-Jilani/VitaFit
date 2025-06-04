@@ -8,28 +8,27 @@ html, body {
   width: 100%;
   height: 100%;
   font-family: 'Segoe UI', sans-serif;
-  overflow-x: hidden; /* Good to keep, prevents horizontal scrollbars */
+  overflow-x: hidden;
 }
 
 .landing {
-  position: fixed; /* Changed from default 'static' */
+  position: fixed;
   top: 0;
   left: 0;
   height: 100vh;
   width: 100vw;
   font-family: 'Segoe UI', sans-serif;
-  z-index: 1; /* Optional: Ensures it's on top of other static content. Adjust if you have other positioned elements with higher z-index. */
-  /* overflow: hidden; /* Optional: if you want to ensure nothing from within .landing can spill out */
+  z-index: 1;
 }
 
 .hero-image {
   background: url('/Background-Image.png') center/cover no-repeat;
-  height: 100%; /* Will take 100% height of .landing (100vh) */
-  width: 100%;  /* Will take 100% width of .landing (100vw) */
+  height: 100%;
+  width: 100%;
   display: flex;
   justify-content: center;
   align-items: center;
-  position: relative; /* Remains important for the .overlay positioning */
+  position: relative;
 }
 
 .overlay {
@@ -107,7 +106,6 @@ html, body {
   }
 }
 
-/* Apply animation to landing hero content */
 .hero-content {
   text-align: center;
   color: white;

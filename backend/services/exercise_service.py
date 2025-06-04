@@ -9,12 +9,11 @@ from config.settings import EXERCISE_MODELS_PATH
 from models.request_models import UserInput
 from utils.helpers import convert_numpy_types
 
-# Exercise Model Globals
-multi_clf: Optional[Any] = None # Exercise Classifier
-multi_reg: Optional[Any] = None # Exercise Regressor
-label_encoders: Optional[Dict[str, Any]] = None # Encoders for Exercise Model outputs (and gender)
 
-# Define the exact order of features for the exercise model
+multi_clf: Optional[Any] = None
+multi_reg: Optional[Any] = None
+label_encoders: Optional[Dict[str, Any]] = None
+
 EXERCISE_FEATURE_COLUMNS_ORDER = ["age", "gender", "height", "weight", "bmi", "calories_intake"]
 
 
@@ -29,7 +28,7 @@ async def load_exercise_models():
 
         if not isinstance(loaded_encoders, dict) or 'gender' not in loaded_encoders:
             raise ValueError("label_encoders.pkl is not a dictionary or is missing 'gender' encoder.")
-        label_encoders = loaded_encoders # Assign to global only if valid
+        label_encoders = loaded_encoders
         print("Exercise prediction models and encoders loaded successfully!")
 
     except FileNotFoundError as e:
@@ -96,11 +95,9 @@ def predict_exercise(user_input_data: UserInput) -> Dict[str, Any]:
     """
     clf, reg, encoders = get_exercise_models_and_encoders()
     if not all([clf, reg, encoders]):
-        # Try loading models if not loaded
         import asyncio
         loop = asyncio.get_event_loop()
         if loop.is_running():
-            # If running in an async context (e.g., FastAPI), schedule loading
             nest_asyncio.apply()
             loop.run_until_complete(load_exercise_models())
         else:

@@ -12,7 +12,7 @@ from reportlab.lib import colors
 
 from models.request_models import ReportRequest, UserPersonalDetails
 from database.mongodb_client import get_db_collection
-from utils.helpers import convert_numpy_types # To ensure stored data is in native types for display
+from utils.helpers import convert_numpy_types
 
 async def generate_report(report_request: ReportRequest) -> StreamingResponse:
     """
@@ -39,7 +39,7 @@ async def generate_report(report_request: ReportRequest) -> StreamingResponse:
     styles.add(ParagraphStyle(name='ReportTitle',
                               fontSize=24,
                               leading=28,
-                              alignment=1, # TA_CENTER
+                              alignment=1,
                               spaceAfter=20,
                               fontName='Helvetica-Bold'))
     styles.add(ParagraphStyle(name='SectionHeader',
@@ -65,7 +65,7 @@ async def generate_report(report_request: ReportRequest) -> StreamingResponse:
                               fontSize=10,
                               leading=12,
                               spaceAfter=5,
-                              alignment=1, # TA_CENTER
+                              alignment=1,
                               fontName='Helvetica-Bold'))
 
     elements = []
@@ -85,11 +85,11 @@ async def generate_report(report_request: ReportRequest) -> StreamingResponse:
         
         if user_data:
             table_style = TableStyle([
-                ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#E8F5E9')), # Light green background for all data rows
-                ('TEXTCOLOR', (0,0), (-1,-1), colors.black), # Ensure text is black for readability
+                ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#E8F5E9')),
+                ('TEXTCOLOR', (0,0), (-1,-1), colors.black),
                 ('ALIGN', (0,0), (-1,-1), 'LEFT'),
-                ('FONTNAME', (0,0), (-1,-1), 'Helvetica'), # Regular font for data
-                ('GRID', (0,0), (-1,-1), 1, colors.HexColor('#A5D6A7')), # Green grid
+                ('FONTNAME', (0,0), (-1,-1), 'Helvetica'),
+                ('GRID', (0,0), (-1,-1), 1, colors.HexColor('#A5D6A7')),
                 ('LEFTPADDING', (0,0), (-1,-1), 6),
                 ('RIGHTPADDING', (0,0), (-1,-1), 6),
                 ('TOPPADDING', (0,0), (-1,-1), 6),
@@ -106,7 +106,6 @@ async def generate_report(report_request: ReportRequest) -> StreamingResponse:
         if value is not None and value != '' and key not in ['medical_conditions', 'dietary_restrictions', 'food_preferences']:
             raw_input_data_for_report.append([key.replace('_', ' ').title() + ":", str(value)])
     
-    # Include these fields if they exist, even if they were not model inputs directly
     if raw_user_input_stored.get('medical_conditions'):
         raw_input_data_for_report.append(["Medical Conditions:", raw_user_input_stored['medical_conditions']])
     if raw_user_input_stored.get('dietary_restrictions'):
@@ -116,8 +115,8 @@ async def generate_report(report_request: ReportRequest) -> StreamingResponse:
 
     if raw_input_data_for_report:
         elements.append(Table(raw_input_data_for_report, style=TableStyle([
-            ('GRID', (0,0), (-1,-1), 1, colors.HexColor('#BDBDBD')), # Grey grid
-            ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#F5F5F5')), # Light grey background
+            ('GRID', (0,0), (-1,-1), 1, colors.HexColor('#BDBDBD')),
+            ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#F5F5F5')),
             ('FONTNAME', (0,0), (-1,-1), 'Helvetica'),
             ('ALIGN', (0,0), (-1,-1), 'LEFT'),
             ('LEFTPADDING', (0,0), (-1,-1), 6),
@@ -134,8 +133,8 @@ async def generate_report(report_request: ReportRequest) -> StreamingResponse:
         exercise_data.append([key.replace('_', ' ').title() + ":", str(value)])
     if exercise_data:
         elements.append(Table(exercise_data, style=TableStyle([
-            ('GRID', (0,0), (-1,-1), 1, colors.HexColor('#81C784')), # Green grid
-            ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#C8E6C9')), # Lighter green background
+            ('GRID', (0,0), (-1,-1), 1, colors.HexColor('#81C784')),
+            ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#C8E6C9')),
             ('FONTNAME', (0,0), (-1,-1), 'Helvetica'),
             ('ALIGN', (0,0), (-1,-1), 'LEFT'),
             ('LEFTPADDING', (0,0), (-1,-1), 6),
@@ -151,12 +150,12 @@ async def generate_report(report_request: ReportRequest) -> StreamingResponse:
         elements.append(Paragraph("Generated Diet Plan", styles['SectionHeader']))
         diet_data = []
         for key, value in diet_predictions_data.items():
-            if key != "message": # Don't display message key in the table
+            if key != "message":
                 diet_data.append([key.replace('_', ' ').title() + ":", str(value)])
         if diet_data:
             elements.append(Table(diet_data, style=TableStyle([
-                ('GRID', (0,0), (-1,-1), 1, colors.HexColor('#64B5F6')), # Blue grid
-                ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#BBDEFB')), # Lighter blue background
+                ('GRID', (0,0), (-1,-1), 1, colors.HexColor('#64B5F6')),
+                ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#BBDEFB')),
                 ('FONTNAME', (0,0), (-1,-1), 'Helvetica'),
                 ('ALIGN', (0,0), (-1,-1), 'LEFT'),
                 ('LEFTPADDING', (0,0), (-1,-1), 6),

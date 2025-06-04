@@ -8,39 +8,34 @@ from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image
 import io
-
-# Import from your new modules
 from config.settings import DB_NAME, IMAGE_CLASSIFIER_MODELS_PATH 
 from database.mongodb_client import connect_to_mongodb, close_mongodb_connection, get_db_collection
-from models.request_models import UserInput, UserPersonalDetails, ReportRequest, DietPlanRequest, ChatRequest # <-- NEW: Add ChatRequest model
+from models.request_models import UserInput, UserPersonalDetails, ReportRequest, DietPlanRequest, ChatRequest
 from services.exercise_service import load_exercise_models, predict_exercise
 from services.diet_service import load_diet_models, predict_diet
 from services.report_service import generate_report as generate_pdf_report
 from models.Image_Classifier_Model.image_classifier_logic import ImageClassifier, DetectionResponse
 from utils.helpers import convert_numpy_types
-
-# --- NEW: Import RAG Service ---
 from services.rag_service import RAGAssistant, load_rag_knowledge_base, initialize_rag_components 
 
 # --- FastAPI App Initialization ---
 app = FastAPI(
     title="Fitness and Diet Prediction API",
-    description="API for predicting exercise and diet plans based on user data, and dish image classification, and AI-powered health overview.", # Updated description
+    description="API for predicting exercise and diet plans based on user data, and dish image classification, and AI-powered health overview.",
     version="1.0.0"
 )
 
 # --- CORS Middleware ---
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],   # Or restrict to your frontend URL like ["http://localhost:3000"]
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# --- Global variables for ML models and RAG ---
 image_classifier_model: Optional[ImageClassifier] = None
-rag_assistant_instance: Optional[RAGAssistant] = None # <-- NEW: Global for RAG assistant
+rag_assistant_instance: Optional[RAGAssistant] = None
 
 # --- Startup Events ---
 @app.on_event("startup")
@@ -89,13 +84,8 @@ async def startup_all():
     # --- NEW: 3. Initialize RAG Components ---
     global rag_assistant_instance
     try:
-        # Load the knowledge base (this might involve processing documents and indexing)
-        # You'll define how load_rag_knowledge_base works in services/rag_service.py
-        # It could return a vector store or simply prepare it for initialization
         knowledge_base = await load_rag_knowledge_base() 
         
-        # Initialize the RAGAssistant with necessary components
-        # You'll define initialize_rag_components in services/rag_service.py
         rag_assistant_instance = await initialize_rag_components(knowledge_base=knowledge_base)
         
         print("RAG Assistant components loaded successfully!")
@@ -210,19 +200,11 @@ async def classify_dish_endpoint(file: UploadFile = File(...)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Dish detection failed: {str(e)}")
 
-# --- NEW: RAG Endpoints ---
-
 @app.post("/ai/overview")
-async def get_ai_overview_endpoint(report_content: ChatRequest): # Assuming ChatRequest can hold the report text
-    """
-    Generates an initial AI-powered overview based on the user's fitness and diet report.
-    """
+async def get_ai_overview_endpoint(report_content: ChatRequest):
     if rag_assistant_instance is None:
         raise HTTPException(status_code=500, detail="AI Health Overview service is not loaded or available.")
     
-    # In a real scenario, you'd load the report content here.
-    # For now, assuming report_content.message holds the full report.
-    # You might pass the user_input or session_id to retrieve the stored report data instead.
     user_report_text = report_content.message 
 
     try:
@@ -240,7 +222,7 @@ async def ai_chat_endpoint(chat_request: ChatRequest):
         raise HTTPException(status_code=500, detail="AI Health Overview service is not loaded or available.")
     
     user_question = chat_request.message
-    session_id = chat_request.session_id # Assuming you want to maintain session context
+    session_id = chat_request.session_id
 
     try:
         response = await rag_assistant_instance.chat_with_ai(user_question, session_id)
