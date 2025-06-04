@@ -6,7 +6,12 @@ import { v4 as uuidv4 } from 'uuid';
 import AIChat from '../components/AIChat';
 
 function FitnessPlanner() {
+<<<<<<< HEAD
     const BACKEND_BASE_URL = "http://localhost:8000";
+=======
+    // Hardcoded Backend Base URL (replace with your actual AWS Public IP)
+    const BACKEND_BASE_URL = "http://13.214.177.16:8000";
+>>>>>>> 5e70af67109face3d28d189b2961e63589f211ef
 
     const [submitted, setSubmitted] = useState(false);
     const [sessionId, setSessionId] = useState('');
