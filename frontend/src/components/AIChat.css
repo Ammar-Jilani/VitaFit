@@ -2,17 +2,23 @@
 
 /* ===== AI Chat Container Styles ===== */
 .ai-chat-container {
-    background: rgba(255, 255, 255, 0.1); /* Slightly transparent white */
+    background: rgba(0, 0, 0, 0.7); /* Slightly transparent white */
     backdrop-filter: blur(10px); /* Frosted glass effect */
     border-radius: 15px;
     padding: 25px;
+    padding: 2rem;
     box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
     border: 1px solid rgba(255, 255, 255, 0.18);
-    width: 100%;
     max-width: 500px;
-    display: flex;
     flex-direction: column;
     margin-top: 20px;
+    width: 500px;
+    height: 1160px;
+    display: block;
+    transition: right 0.3s;
+    position: fixed;
+    bottom: 14px;
+    right: 0px;
 }
 
 .ai-chat-container h3 {
@@ -25,10 +31,9 @@
 .chat-messages {
     flex-grow: 1;
     overflow-y: auto;
-    max-height: 400px;
+    max-height: 800px;
     padding: 10px;
     border-radius: 8px;
-    background-color: rgba(0, 0, 0, 0.2);
     margin-bottom: 15px;
     display: flex;
     flex-direction: column;
@@ -66,7 +71,10 @@
 .chat-input {
     display: flex;
     gap: 10px;
-}
+    width: 450px;
+    bottom: 15px;
+    position: fixed;
+}   
 
 .chat-input input {
     flex-grow: 1;
@@ -106,30 +114,7 @@
 }
 
 .chat-input button:disabled {
-    background-color: #cccccc;
+    background-color: #afadad;
     cursor: not-allowed;
 }
 
-/* ===== Layout for Main Container and Chatbot Placement ===== */
-.container {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    padding: 20px;
-    border: 1px solid #ccc;
-    flex-wrap: wrap; /* Responsive: stack on smaller screens */
-    gap: 20px;
-}
-
-.main-content {
-    flex: 2;
-    padding: 20px;
-}
-
-.chatbot {
-    flex: 1;
-    margin-left: 20px;
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-}

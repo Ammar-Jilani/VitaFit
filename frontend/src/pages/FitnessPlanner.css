@@ -12,19 +12,18 @@
 
     /* Background for the fitness page */
     .fitness-bg {
-        background: url('/fitness-bg.jpg') center/cover no-repeat;
+        background: url('/Background-Image.png') center/cover no-repeat;
         height: 100vh;
         width: 100vw;
         display: flex;
         align-items: center;
         justify-content: center;
+        gap: 2rem;
         position: relative;
         overflow-y: auto; /* Allow scrolling if content overflows */
         padding: 2rem;
     }
-
-    /* Overlay for the form/content */
-    .form-overlay {
+    .main-content-wrapper{
         background-color: rgba(0, 0, 0, 0.7); /* Dark semi-transparent overlay */
         padding: 2rem;
         border-radius: 12px;
@@ -32,7 +31,7 @@
         max-width: 1200px; /* Increased max-width to accommodate side-by-side content */
         color: white; /* Ensure all general text within the overlay is white */
         animation: fadeIn 1.2s ease;
-
+        gap: 2rem;
         /* These flex properties are for the main layout within the overlay */
         display: flex;
         flex-direction: column; /* Stack sections vertically by default (e.g., form then reports/chat) */
@@ -178,25 +177,20 @@
         margin-top: 2rem;
         width: 100%;
     }
-
-    /* Container for Exercise and Diet Reports AND the prompt/download buttons */
-    /* This is effectively the 'left column' on large screens */
-    .reports-content-wrapper { /* RENAMED for clarity */
+    .report-container-wrapper{
         display: flex;
-        flex-direction: column; /* Stack reports and buttons vertically within this wrapper */
-        gap: 2rem; /* Gap between individual reports and buttons */
-        align-items: center; /* Center reports and buttons within their wrapper */
+        flex-direction: column; /* Default to column for small screens */
+        gap: 30px; /* Space between reports section and chat section */
+        justify-content: center;
+        align-items: center; /* Center items when stacked */
         width: 100%;
-        max-width: 800px; /* Max width for the entire left column content */
     }
-
     /* Container for Exercise and Diet Reports when side-by-side */
     .reports-container { /* This only contains the two main reports (Exercise & Diet) */
         display: flex;
-        flex-direction: row; /* Default to side-by-side for the two reports */
+        padding: 2rem;
         gap: 2rem;
         justify-content: center;
-        align-items: flex-start; /* Align reports to the top */
         flex-wrap: wrap; /* Allow wrapping of the two reports on smaller screens */
         width: 100%; /* Take full width of reports-content-wrapper */
     }
@@ -283,11 +277,6 @@
         animation: fadeIn 1.2s ease-in-out;
     }
 
-    .final-report-download p {
-        margin-bottom: 1rem;
-        font-size: 1.1rem;
-    }
-
     /* New CSS for AI Chat Section */
     .ai-chat-section {
         width: 100%; /* Take full width on smaller screens */
@@ -314,12 +303,6 @@
             /* Changed to flex-start if you want everything left-aligned in the left column */
         }
 
-        /* Ensure the individual reports within reports-container still flex correctly */
-        .reports-container {
-            flex-direction: row; /* Keep these two reports side-by-side */
-            justify-content: center; /* Center them within their container */
-            align-items: flex-start; /* Align them to the top */
-        }
 
 
         .ai-chat-section {
@@ -327,9 +310,6 @@
             min-width: 400px; /* Ensure chat has a decent minimum width */
             margin-top: 0; /* Remove top margin when side-by-side */
         }
-
-        /* Adjust the diet plan prompt and download button within the reports-content-wrapper */
-        .diet-plan-prompt,
         .final-report-download {
             /* These should be responsive within the reports-content-wrapper */
             width: 100%; /* They take full width of reports-content-wrapper now */

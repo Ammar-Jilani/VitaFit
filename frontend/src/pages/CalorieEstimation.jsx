@@ -1,20 +1,20 @@
 // frontend/CalorieEstimation.jsx
 
 import React, { useState, useEffect } from 'react';
+import axios from 'axios';
 import './CalorieEstimation.css';
 
-// Define the backend API URL. Use your actual AWS Public IP.
-// IMPORTANT: Replace 'http://13.229.250.121:8000' with your actual AWS Fargate Public IP if it changes.
-const API_BASE_URL = 'http://localhost:8000'; 
-
 function CalorieEstimation() {
+    // Defines the base URL for backend API interactions.
+    const API_BASE_URL = 'http://localhost:8000';
+
     const [loading, setLoading] = useState(false);
     const [showResult, setShowResult] = useState(false);
-    const [imagePreviewUrl, setImagePreviewUrl] = useState(null); // Changed 'image' to 'imagePreviewUrl' for clarity
-    const [detectionResults, setDetectionResults] = useState(null); // New state for storing API response
-    const [error, setError] = useState(null); // New state for error handling
+    const [imagePreviewUrl, setImagePreviewUrl] = useState(null);
+    const [detectionResults, setDetectionResults] = useState(null);
+    const [error, setError] = useState(null);
 
-    // Clean up the object URL to prevent memory leaks
+    // Cleans up the image preview URL to prevent memory leaks.
     useEffect(() => {
         return () => {
             if (imagePreviewUrl) {
@@ -23,46 +23,40 @@ function CalorieEstimation() {
         };
     }, [imagePreviewUrl]);
 
+    // Handles the image upload, sends it to the backend for analysis, and displays results.
     const handleUpload = async (e) => {
         const file = e.target.files[0];
         if (!file) {
             return;
         }
 
-        // Clear previous states
         setLoading(true);
         setShowResult(false);
         setDetectionResults(null);
         setError(null);
-        setImagePreviewUrl(URL.createObjectURL(file)); // Set image preview immediately
+        setImagePreviewUrl(URL.createObjectURL(file));
 
         const formData = new FormData();
-        formData.append('file', file); // 'file' must match the parameter name in your FastAPI endpoint (@app.post("/classify_dish", file: UploadFile = File(...)))
+        formData.append('file', file);
 
         try {
-            const response = await fetch(`${API_BASE_URL}/classify_dish`, { // Updated URL
-                method: 'POST',
-                body: formData,
+            const response = await axios.post(`${API_BASE_URL}/classify_dish`, formData, {
+                headers: {
+                    'Content-Type': 'multipart/form-data',
+                },
             });
 
-            if (!response.ok) {
-                // If response is not OK (e.g., 400, 500 status)
-                const errorData = await response.json();
-                throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
-            }
-
-            const data = await response.json();
-            setDetectionResults(data); // Store the entire response object
-            setShowResult(true); // Show results section
-            console.log('Detection results:', data); // Log the response for debugging
+            setDetectionResults(response.data);
+            setShowResult(true);
+            console.log('Detection results:', response.data);
 
         } catch (err) {
             console.error('Error uploading image:', err);
-            setError(err.message || 'Failed to analyze image. Please try again.'); // Display specific error message
-            setShowResult(false); // Do not show results if there's an error
-            setImagePreviewUrl(null); // Clear image preview on error
+            setError(err.response?.data?.detail || err.message || 'Failed to analyze image. Please try again.');
+            setShowResult(false);
+            setImagePreviewUrl(null);
         } finally {
-            setLoading(false); // Always stop loading, regardless of success or failure
+            setLoading(false);
         }
     };
 
@@ -70,7 +64,7 @@ function CalorieEstimation() {
         <div className="calorie-container">
             <div className="calorie-hero">
                 <h1>Calorie Estimation</h1>
-                <p>Upload your food image or type its name to get calorie insights</p>
+                <p>Upload your food image to get calorie insights</p>
 
                 <label htmlFor="image-upload" className="custom-upload">
                     📷 Upload Food Image

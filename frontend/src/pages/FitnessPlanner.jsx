@@ -1,21 +1,21 @@
 // frontend/src/pages/FitnessPlanner.jsx
 import React, { useState, useEffect } from 'react';
+import axios from 'axios';
 import './FitnessPlanner.css';
 import { v4 as uuidv4 } from 'uuid';
-import AIChat from '../components/AIChat'; // Import the new AI Chat component
+import AIChat from '../components/AIChat';
 
 function FitnessPlanner() {
-    // Hardcoded Backend Base URL (replace with your actual AWS Public IP)
     const BACKEND_BASE_URL = "http://localhost:8000";
 
-    const [submitted, setSubmitted] = useState(false); // True after initial exercise prediction
-    const [sessionId, setSessionId] = useState(''); // State to store the session ID
-    const [exercisePlan, setExercisePlan] = useState(null); // State for exercise predictions
-    const [dietPlan, setDietPlan] = useState(null); // State for diet predictions
-    const [loadingPredictions, setLoadingPredictions] = useState(false); // Loading state for API call (for exercise)
-    const [loadingDietPlan, setLoadingDietPlan] = useState(false); // New loading state for diet plan API call
-    const [predictionError, setPredictionError] = useState(''); // Error state for initial prediction (exercise)
-    const [dietPredictionError, setDietPredictionError] = useState(''); // Error state for diet prediction
+    const [submitted, setSubmitted] = useState(false);
+    const [sessionId, setSessionId] = useState('');
+    const [exercisePlan, setExercisePlan] = useState(null);
+    const [dietPlan, setDietPlan] = useState(null);
+    const [loadingPredictions, setLoadingPredictions] = useState(false);
+    const [loadingDietPlan, setLoadingDietPlan] = useState(false);
+    const [predictionError, setPredictionError] = useState('');
+    const [dietPredictionError, setDietPredictionError] = useState('');
 
     const [formData, setFormData] = useState({
         name: '',
@@ -27,11 +27,11 @@ function FitnessPlanner() {
         heightUnit: 'cm',
         weightValue: '',
         weightUnit: 'kg',
-        bmi: '', // auto-calculated
+        bmi: '',
         caloriesIntake: '',
     });
 
-    // Effect to calculate BMI
+    // Manages BMI calculation based on user's height and weight.
     useEffect(() => {
         const heightValue = parseFloat(formData.heightValue);
         const weightValue = parseFloat(formData.weightValue);
@@ -49,7 +49,7 @@ function FitnessPlanner() {
         } else if (formData.heightUnit === 'feet') {
             heightInMeters = (heightValue * 30.48) / 100;
         } else {
-            heightInMeters = 0; // Should not happen with current options
+            heightInMeters = 0;
         }
 
         let weightInKg;
@@ -58,7 +58,7 @@ function FitnessPlanner() {
         } else if (formData.weightUnit === 'lbs') {
             weightInKg = weightValue * 0.453592;
         } else {
-            weightInKg = 0; // Should not happen with current options
+            weightInKg = 0;
         }
 
         if (heightInMeters > 0 && weightInKg > 0) {
@@ -69,15 +69,15 @@ function FitnessPlanner() {
         }
     }, [formData.heightValue, formData.heightUnit, formData.weightValue, formData.weightUnit]);
 
-    // Generate session ID on component mount
+    // Generates a unique session ID on component initialization.
     useEffect(() => {
         setSessionId(uuidv4());
     }, []);
 
+    // Validates user input before submitting fitness data.
     const validateForm = () => {
         const { name, mobile, email, age, gender, heightValue, heightUnit, weightValue, weightUnit, caloriesIntake } = formData;
 
-        // --- Existing Validations (Basic checks for empty/invalid input) ---
         if (!name.trim()) {
             setPredictionError('Full Name is required.');
             return false;
@@ -95,7 +95,6 @@ function FitnessPlanner() {
             return false;
         }
 
-        // --- Age Validation ---
         const ageNum = parseInt(age);
         if (!age || isNaN(ageNum) || ageNum <= 0) {
             setPredictionError('Age must be a valid positive number.');
@@ -115,7 +114,6 @@ function FitnessPlanner() {
             return false;
         }
 
-        // --- Height Validation ---
         const heightNum = parseFloat(heightValue);
         if (!heightValue || isNaN(heightNum) || heightNum <= 0) {
             setPredictionError('Height must be a valid positive number.');
@@ -140,7 +138,6 @@ function FitnessPlanner() {
             return false;
         }
 
-        // --- Weight Validation ---
         const weightNum = parseFloat(weightValue);
         if (!weightValue || isNaN(weightNum) || weightNum <= 0) {
             setPredictionError('Weight must be a valid positive number.');
@@ -154,11 +151,11 @@ function FitnessPlanner() {
             weightInKg = weightNum * 0.453592;
         }
 
-        if (weightInKg < 10) { // Very low weight
+        if (weightInKg < 10) {
             setPredictionError("Are you sure you're not a feather?");
             return false;
         }
-        if (weightInKg > 500) { // Very high weight
+        if (weightInKg > 500) {
             setPredictionError("How fat are you?!?");
             return false;
         }
@@ -168,20 +165,21 @@ function FitnessPlanner() {
             return false;
         }
 
-        setPredictionError(''); // Clear any previous errors if all checks pass
+        setPredictionError('');
         return true;
     };
 
+    // Handles initial form submission to get exercise plan.
     const handleInitialSubmit = async (e) => {
         e.preventDefault();
 
         if (!validateForm()) {
-            return; // Stop if validation fails
+            return;
         }
 
         setLoadingPredictions(true);
         setPredictionError('');
-        setDietPredictionError(''); // Clear diet error too
+        setDietPredictionError('');
 
         const dataToSend = {
             session_id: sessionId,
@@ -195,32 +193,20 @@ function FitnessPlanner() {
         };
 
         try {
-            const response = await fetch(`${BACKEND_BASE_URL}/predict_exercise`, { // Updated URL
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify(dataToSend),
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.detail || "Failed to get exercise plan. Please check your inputs.");
-            }
-
-            const result = await response.json();
-            console.log("Exercise prediction response:", result);
-            setExercisePlan(result.exercise_plan);
-            setDietPlan(null); // Reset diet plan for a new session/initial submission
-            setSubmitted(true); // Indicate initial submission is complete
+            const response = await axios.post(`${BACKEND_BASE_URL}/predict_exercise`, dataToSend);
+            console.log("Exercise prediction response:", response.data);
+            setExercisePlan(response.data.exercise_plan);
+            setDietPlan(null);
+            setSubmitted(true);
         } catch (error) {
             console.error("Exercise prediction error:", error.message);
-            setPredictionError(error.message);
+            setPredictionError(error.response?.data?.detail || "Failed to get exercise plan. Please check your inputs.");
         } finally {
             setLoadingPredictions(false);
         }
     };
 
+    // Requests a personalized diet plan from the backend.
     const handleDietPrediction = async () => {
         setLoadingDietPlan(true);
         setDietPredictionError('');
@@ -230,31 +216,18 @@ function FitnessPlanner() {
         };
 
         try {
-            const response = await fetch(`${BACKEND_BASE_URL}/predict_diet`, { // Updated URL
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify(dietDataToSend),
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.detail || "Failed to get diet plan. Please try again.");
-            }
-
-            const result = await response.json();
-            console.log("Diet prediction response:", result);
-            setDietPlan(result.diet_plan);
+            const response = await axios.post(`${BACKEND_BASE_URL}/predict_diet`, dietDataToSend);
+            console.log("Diet prediction response:", response.data);
+            setDietPlan(response.data.diet_plan);
         } catch (error) {
             console.error("Diet prediction error:", error.message);
-            setDietPredictionError(error.message);
+            setDietPredictionError(error.response?.data?.detail || "Failed to get diet plan. Please try again.");
         } finally {
             setLoadingDietPlan(false);
         }
     };
 
-
+    // Initiates download of the comprehensive fitness report.
     const handleDownloadReport = async () => {
         try {
             const userDetails = {
@@ -264,27 +237,17 @@ function FitnessPlanner() {
                 phone: formData.mobile,
             };
 
-            const response = await fetch(`${BACKEND_BASE_URL}/generate_report`, { // Updated URL
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                    session_id: sessionId,
-                    user_details: userDetails
-                }),
+            const response = await axios.post(`${BACKEND_BASE_URL}/generate_report`, {
+                session_id: sessionId,
+                user_details: userDetails
+            }, {
+                responseType: 'blob', // Important for downloading files
             });
 
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.detail || "Failed to generate report. Please try again later.");
-            }
-
-            const blob = await response.blob();
-            const url = window.URL.createObjectURL(new Blob([blob]));
+            const url = window.URL.createObjectURL(new Blob([response.data]));
             const link = document.createElement('a');
             link.href = url;
-            const contentDisposition = response.headers.get('Content-Disposition');
+            const contentDisposition = response.headers['content-disposition'];
             const filenameMatch = contentDisposition && contentDisposition.match(/filename="([^"]+)"/);
             const filename = filenameMatch ? filenameMatch[1] : `Fitness_Report_${sessionId}.pdf`;
 
@@ -295,18 +258,16 @@ function FitnessPlanner() {
             window.URL.revokeObjectURL(url);
         } catch (error) {
             console.error("Report download error:", error.message);
-            // Optionally, add a state for report download error message
-            // setReportDownloadError(error.message);
-            alert(`Error downloading report: ${error.message}`); // Simple alert for now
+            alert(`Error downloading report: ${error.response?.data?.detail || error.message}`);
         }
     };
 
+    // Updates form data while handling specific input formatting.
     const handleChange = (e) => {
         const { name, value } = e.target;
 
         let newValue = value;
         if (name === 'mobile') {
-            // Filter out non-digit characters
             newValue = value.replace(/\D/g, '');
         }
 
@@ -318,8 +279,13 @@ function FitnessPlanner() {
 
     return (
         <div className="fitness-bg">
-            <div className="main-content-wrapper"> {/* New wrapper for main content and chat */}
-                <div className="form-and-reports-area"> {/* Existing form-overlay content */}
+                {submitted && (
+                    <div className="ai-chat-sidebar">
+                        <AIChat BACKEND_BASE_URL={BACKEND_BASE_URL} sessionId={sessionId} />
+                    </div>
+                )}
+            <div className="main-content-wrapper">
+                <div className="form-and-reports-area">
                     {!submitted ? (
                         <>
                             <h1 className="fade-text">Enter Your Details for Fitness Suggestions</h1>
@@ -333,7 +299,7 @@ function FitnessPlanner() {
                                     required
                                 />
                                 <input
-                                    type="tel" // Keep type="tel" for mobile keyboard accessibility
+                                    type="tel"
                                     name="mobile"
                                     placeholder="📞 Mobile Number"
                                     value={formData.mobile}
@@ -367,7 +333,6 @@ function FitnessPlanner() {
                                     <option value="female">♀️ Female</option>
                                 </select>
 
-                                {/* Height Input with Unit Selection */}
                                 <div className="input-group">
                                     <input
                                         type="number"
@@ -389,7 +354,6 @@ function FitnessPlanner() {
                                     </select>
                                 </div>
 
-                                {/* Weight Input with Unit Selection */}
                                 <div className="input-group">
                                     <input
                                         type="number"
@@ -418,7 +382,6 @@ function FitnessPlanner() {
                                     onChange={handleChange}
                                     required
                                 />
-                                {/* BMI Display - Changed from input to div */}
                                 <div className="bmi-display">
                                     <span>📊 BMI: </span>
                                     {formData.bmi ? <strong>{formData.bmi}</strong> : 'Auto-calculated'}
@@ -429,11 +392,9 @@ function FitnessPlanner() {
                                 {predictionError && <p className="error-message">{predictionError}</p>}
                             </form>
                         </>
-                    ) : ( // After initial submission
-                        <div className="report-container-wrapper"> {/* Renamed from report-and-chat-container to clarify purpose */}
-                            {/* Container for the side-by-side reports */}
+                    ) : (
+                        <div className="report-container-wrapper">
                             <div className="reports-container">
-                                {/* Exercise Report Section */}
                                 <div className="recommendation-report">
                                     <h2>Daily Exercise Recommendation Report</h2>
                                     {exercisePlan ? (
@@ -462,10 +423,9 @@ function FitnessPlanner() {
                                     )}
                                 </div>
 
-                                {/* Diet Plan Display - Only show if dietPlan exists */}
                                 {dietPlan && (
                                     <div className="recommendation-report diet-plan slide-in">
-                                        <h2>VitaFit Suggested Diet Plan</h2>
+                                        <h2>Suggested Diet Plan</h2>
                                         {!dietPlan.error && (
                                             <table className="fitness-table">
                                                 <thead>
@@ -490,9 +450,8 @@ function FitnessPlanner() {
                                         {dietPlan.message && <p className="info-message">{dietPlan.message}</p>}
                                     </div>
                                 )}
-                            </div> {/* End reports-container */}
+                            </div>
 
-                            {/* New section for Diet Plan Button and related text - positioned in the middle */}
                             {submitted && !dietPlan && (
                                 <div className="diet-plan-prompt">
                                     <p>Ready for a personalized diet plan?</p>
@@ -507,27 +466,18 @@ function FitnessPlanner() {
                                 </div>
                             )}
 
-                            {/* Download Report button is now below both plans (or the diet plan prompt if diet plan is not generated) */}
-                            {/* This button will always show after initial submission */}
                             {submitted && (
                                 <div className="final-report-download">
                                     <h2>Download your complete fitness report now!</h2>
                                     <button className="animated-btn" onClick={handleDownloadReport}>
-                                        Download Overall Fitness Report (PDF)
+                                        Download Report (PDF)
                                     </button>
                                 </div>
                             )}
                         </div>
                     )}
-                </div> {/* End form-and-reports-area */}
-
-                {/* Integrate the AI Chat component here, outside of the form-overlay/reports structure */}
-                {submitted && ( // Only show AI chat after initial submission
-                    <div className="ai-chat-sidebar"> {/* Renamed for clarity - this will be the right sidebar */}
-                        <AIChat BACKEND_BASE_URL={BACKEND_BASE_URL} sessionId={sessionId} />
-                    </div>
-                )}
-            </div> {/* End main-content-wrapper */}
+                </div>
+            </div>
         </div>
     );
 }

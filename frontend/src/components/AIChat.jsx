@@ -1,5 +1,6 @@
 // frontend/src/components/AIChat.jsx
 import React, { useState, useEffect } from 'react';
+import axios from 'axios';
 import './AIChat.css';
 
 const AIChat = ({ BACKEND_BASE_URL, sessionId }) => {
@@ -10,6 +11,7 @@ const AIChat = ({ BACKEND_BASE_URL, sessionId }) => {
     const [overviewLoading, setOverviewLoading] = useState(true);
     const [overviewError, setOverviewError] = useState('');
 
+    // Extracts and formats error messages from API responses.
     const getErrorMessage = (errorData) => {
         if (errorData && errorData.detail) {
             if (typeof errorData.detail === 'string') {
@@ -25,6 +27,7 @@ const AIChat = ({ BACKEND_BASE_URL, sessionId }) => {
         return 'An unknown error occurred.';
     };
 
+    // Fetches an initial health overview from the AI based on the session ID.
     useEffect(() => {
         const fetchAiOverview = async () => {
             if (!sessionId) {
@@ -36,32 +39,17 @@ const AIChat = ({ BACKEND_BASE_URL, sessionId }) => {
             setOverviewError('');
 
             try {
-                const response = await fetch(`${BACKEND_BASE_URL}/ai/overview`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    // *** IMPORTANT CHANGE HERE FOR OVERVIEW ***
-                    body: JSON.stringify({
-                        session_id: sessionId,
-                        message: "Please provide an initial health overview based on my fitness data." // A default message for overview
-                    }),
+                const response = await axios.post(`${BACKEND_BASE_URL}/ai/overview`, {
+                    session_id: sessionId,
+                    message: "Please provide an initial health overview based on my fitness data."
                 });
 
-                if (!response.ok) {
-                    const errorData = await response.json();
-                    const errorMessage = getErrorMessage(errorData);
-                    throw new Error(errorMessage);
-                }
-
-                const data = await response.json();
-                // Backend returns 'response' for both chat and overview based on your main.py
-                setAiOverview(data.response);
-                setMessages([{ sender: 'ai', text: data.response }]);
+                setAiOverview(response.data.response);
+                setMessages([{ sender: 'ai', text: response.data.response }]);
             } catch (error) {
                 console.error('Error fetching AI health overview:', error.message);
-                setOverviewError(`Error getting health overview: ${error.message}`);
-                setMessages([{ sender: 'ai', text: `Failed to load initial overview: ${error.message}` }]);
+                setOverviewError(`Error getting health overview: ${getErrorMessage(error.response?.data)}`);
+                setMessages([{ sender: 'ai', text: `Failed to load initial overview: ${getErrorMessage(error.response?.data)}` }]);
             } finally {
                 setOverviewLoading(false);
             }
@@ -70,6 +58,7 @@ const AIChat = ({ BACKEND_BASE_URL, sessionId }) => {
         fetchAiOverview();
     }, [sessionId, BACKEND_BASE_URL]);
 
+    // Sends a user message to the AI chat and processes the AI's response.
     const sendMessage = async () => {
         if (input.trim() === '' || loading) return;
 
@@ -80,32 +69,17 @@ const AIChat = ({ BACKEND_BASE_URL, sessionId }) => {
         setLoading(true);
 
         try {
-            const response = await fetch(`${BACKEND_BASE_URL}/ai/chat`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                // *** IMPORTANT CHANGE HERE FOR CHAT ***
-                body: JSON.stringify({
-                    session_id: sessionId,
-                    message: userMessage.text // Send the user's input as 'message'
-                }),
+            const response = await axios.post(`${BACKEND_BASE_URL}/ai/chat`, {
+                session_id: sessionId,
+                message: userMessage.text
             });
 
-            if (!response.ok) {
-                const errorData = await response.json();
-                const errorMessage = getErrorMessage(errorData);
-                throw new Error(errorMessage);
-            }
-
-            const data = await response.json();
-            // Backend returns 'response' for both chat and overview
-            const aiResponse = { sender: 'ai', text: data.response };
+            const aiResponse = { sender: 'ai', text: response.data.response };
             setMessages((prevMessages) => [...prevMessages, aiResponse]);
 
         } catch (error) {
             console.error('Error sending message to AI chat:', error);
-            setMessages((prevMessages) => [...prevMessages, { sender: 'ai', text: `Error: ${error.message}` }]);
+            setMessages((prevMessages) => [...prevMessages, { sender: 'ai', text: `Error: ${getErrorMessage(error.response?.data)}` }]);
         } finally {
             setLoading(false);
         }

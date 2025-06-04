@@ -1,1 +1,18 @@
 .env
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+.env
+.venv/
+venv/
+Venv/
+ENV/
+env.bak/
+venv.bak/
+.mypy_cache/
+.pytest_cache/
+.fastapi_cache/
