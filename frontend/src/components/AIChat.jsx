@@ -1,5 +1,4 @@
-// frontend/src/components/AIChat.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import './AIChat.css';
 
@@ -10,13 +9,14 @@ const AIChat = ({ BACKEND_BASE_URL, sessionId }) => {
     const [aiOverview, setAiOverview] = useState('');
     const [overviewLoading, setOverviewLoading] = useState(true);
     const [overviewError, setOverviewError] = useState('');
+    const [showNewMessageBanner, setShowNewMessageBanner] = useState(false);
 
-    // Extracts and formats error messages from API responses.
+    const chatEndRef = useRef(null);
+    const chatContainerRef = useRef(null);
+
     const getErrorMessage = (errorData) => {
-        if (errorData && errorData.detail) {
-            if (typeof errorData.detail === 'string') {
-                return errorData.detail;
-            }
+        if (errorData?.detail) {
+            if (typeof errorData.detail === 'string') return errorData.detail;
             if (Array.isArray(errorData.detail)) {
                 return errorData.detail.map(err => {
                     const loc = err.loc ? err.loc.join('.') : 'unknown';
@@ -27,7 +27,15 @@ const AIChat = ({ BACKEND_BASE_URL, sessionId }) => {
         return 'An unknown error occurred.';
     };
 
-    // Fetches an initial health overview from the AI based on the session ID.
+    const scrollToBottom = () => {
+        chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    };
+
+    const isUserAtBottom = () => {
+        const el = chatContainerRef.current;
+        return el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+    };
+
     useEffect(() => {
         const fetchAiOverview = async () => {
             if (!sessionId) {
@@ -58,14 +66,27 @@ const AIChat = ({ BACKEND_BASE_URL, sessionId }) => {
         fetchAiOverview();
     }, [sessionId, BACKEND_BASE_URL]);
 
-    // Sends a user message to the AI chat and processes the AI's response.
+    useEffect(() => {
+        if (isUserAtBottom()) {
+            scrollToBottom();
+            setShowNewMessageBanner(false);
+        } else {
+            setShowNewMessageBanner(true);
+        }
+    }, [messages]);
+
+    const handleScroll = () => {
+        if (isUserAtBottom()) {
+            setShowNewMessageBanner(false);
+        }
+    };
+
     const sendMessage = async () => {
         if (input.trim() === '' || loading) return;
 
         const userMessage = { sender: 'user', text: input };
-        setMessages((prevMessages) => [...prevMessages, userMessage]);
+        setMessages(prev => [...prev, userMessage]);
         setInput('');
-
         setLoading(true);
 
         try {
@@ -75,11 +96,13 @@ const AIChat = ({ BACKEND_BASE_URL, sessionId }) => {
             });
 
             const aiResponse = { sender: 'ai', text: response.data.response };
-            setMessages((prevMessages) => [...prevMessages, aiResponse]);
-
+            setMessages(prev => [...prev, aiResponse]);
         } catch (error) {
-            console.error('Error sending message to AI chat:', error);
-            setMessages((prevMessages) => [...prevMessages, { sender: 'ai', text: `Error: ${getErrorMessage(error.response?.data)}` }]);
+            console.error('Error sending message:', error);
+            setMessages(prev => [...prev, {
+                sender: 'ai',
+                text: `Error: ${getErrorMessage(error.response?.data)}`
+            }]);
         } finally {
             setLoading(false);
         }
@@ -88,7 +111,12 @@ const AIChat = ({ BACKEND_BASE_URL, sessionId }) => {
     return (
         <div className="ai-chat-container">
             <h3>AI Fitness Assistant</h3>
-            <div className="chat-messages">
+
+            <div
+                className="chat-messages"
+                ref={chatContainerRef}
+                onScroll={handleScroll}
+            >
                 {overviewLoading && <div className="message ai">Loading your health overview...</div>}
                 {overviewError && <div className="message ai error-message">{overviewError}</div>}
                 {!overviewLoading && messages.length === 0 && !overviewError && (
@@ -100,13 +128,21 @@ const AIChat = ({ BACKEND_BASE_URL, sessionId }) => {
                     </div>
                 ))}
                 {loading && <div className="message ai">Thinking...</div>}
+                <div ref={chatEndRef} />
             </div>
+
+            {showNewMessageBanner && (
+                <div className="new-message-banner" onClick={scrollToBottom}>
+                    ⬇ New message
+                </div>
+            )}
+
             <div className="chat-input">
                 <input
                     type="text"
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
-                    onKeyPress={(e) => { if (e.key === 'Enter') sendMessage(); }}
+                    onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
                     placeholder="Ask me anything..."
                     disabled={loading || overviewLoading || !sessionId}
                 />

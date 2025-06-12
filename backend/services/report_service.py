@@ -147,6 +147,7 @@ async def generate_report(report_request: ReportRequest) -> StreamingResponse:
     # Diet Plan
     diet_predictions_data = prediction_record.get('diet_predictions', {})
     if diet_predictions_data and not (isinstance(diet_predictions_data, dict) and 'error' in diet_predictions_data):
+        elements.append(Paragraph("\n", styles['SectionHeader']))
         elements.append(Paragraph("Generated Diet Plan", styles['SectionHeader']))
         diet_data = []
         for key, value in diet_predictions_data.items():
@@ -169,8 +170,9 @@ async def generate_report(report_request: ReportRequest) -> StreamingResponse:
         elements.append(Paragraph(f"Error: {diet_predictions_data['error']}", styles['NormalText']))
         elements.append(Spacer(1, 0.2 * inch))
     else:
+        elements.append(Paragraph("\n", styles['SectionHeader']))
         elements.append(Paragraph("Diet Plan Status:", styles['SectionHeader']))
-        elements.append(Paragraph("Diet plan has not yet been generated for this session. Please use the /predict_diet endpoint first.", styles['NormalText']))
+        elements.append(Paragraph("Diet plan has not yet been generated for this session.", styles['NormalText']))
         elements.append(Spacer(1, 0.2 * inch))
 
     # Build PDF

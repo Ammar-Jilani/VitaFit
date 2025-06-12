@@ -10,7 +10,7 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import TextLoader, PyPDFLoader
 
 
-from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline # Re-import these for direct pipeline creation
+from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline # type:ignore
 from transformers.trainer_utils import set_seed
 import torch
 
@@ -24,6 +24,15 @@ from config.settings import (
 )
 
 class RAGAssistant:
+    def _clean_response_text(self, text: str) -> str:
+        """
+        Cleans the model's raw output to remove unwanted formatting like numbered lists.
+        """
+        # Remove serial numbers like "1.", "2)", etc., at the beginning of lines
+        cleaned = re.sub(r'^\s*(\d+[\.\)])\s*', '', text, flags=re.MULTILINE)
+        # Optionally remove excess whitespace
+        return cleaned.strip()
+    
     def __init__(self, llm_chain: RetrievalQA, off_topic_classifier_llm: Optional[HuggingFacePipeline] = None):
         self.llm_chain = llm_chain
         self.off_topic_classifier_llm = off_topic_classifier_llm
@@ -44,7 +53,10 @@ class RAGAssistant:
         Health Overview:
         """
         response = await self.llm_chain.ainvoke({"query": overview_prompt})
-        return response['result']
+        raw_answer = response['result']
+        final_answer = self._clean_response_text(raw_answer)
+        return final_answer
+
 
     async def chat_with_ai(self, user_question: str, session_id: str) -> str:
         if not self.llm_chain:
@@ -61,7 +73,10 @@ class RAGAssistant:
 
         # Step 2: Retrieve and generate the response for the on-topic question
         response = await self.llm_chain.ainvoke({"query": user_question})
-        return response['result']
+        raw_answer = response['result']
+        final_answer = self._clean_response_text(raw_answer)
+        return final_answer
+
 
     async def _check_if_on_topic(self, question: str) -> bool:
         """
@@ -84,7 +99,7 @@ class RAGAssistant:
             
             response_text = ""
             if isinstance(raw_response, list) and raw_response:
-                generated_text = raw_response[0].get('generated_text', '').strip() 
+                generated_text = raw_response[0].get('generated_text', '').strip() #type:ignore
                 if generated_text.startswith(off_topic_prompt):
                     response_text = generated_text[len(off_topic_prompt):].strip()
                 else:
@@ -200,8 +215,8 @@ async def initialize_rag_components(knowledge_base: Any) -> RAGAssistant:
     model_rag.eval()
 
     rag_pipeline_kwargs = {
-        "max_new_tokens": 512,
-        "temperature": 0.8,
+        "max_new_tokens": 256,
+        "temperature": 0.3,
         "do_sample": True,
         "repetition_penalty": 1.05,
         "pad_token_id": tokenizer_rag.eos_token_id, 
@@ -225,8 +240,14 @@ async def initialize_rag_components(knowledge_base: Any) -> RAGAssistant:
         raise RuntimeError(f"Failed to initialize main RAG LLM: {e}") 
 
     rag_template = """
-    You are VitaFit AI Health Assistant. Answer the following question based on the context provided.
-    
+    You are VitaFit, a friendly and knowledgeable fitness assistant.
+    Answer the user's question based on the following retrieved context, using your own words.
+    - Be concise, supportive, and clear.
+    - Summarize the key points instead of copying them.
+    - Do not use paragraph numbers, serials like "1.", or formatting from the original source.
+    - Focus only on health, diet, nutrition, exercise, and wellness advice.
+    - Respond like a coach or health advisor.
+
     User Report or Question:
     {question}
 
