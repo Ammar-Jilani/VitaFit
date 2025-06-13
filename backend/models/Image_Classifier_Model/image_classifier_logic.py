@@ -11,7 +11,7 @@ from pydantic import BaseModel
 class DishInfo(BaseModel):
     class_name: str
     confidence: float
-    box: List[float] # [x1, y1, x2, y2]
+    box: List[float] 
     origin: Union[str, None] = None
     description: Union[str, None] = None
     estimated_calories: Union[str, None] = None
@@ -68,26 +68,26 @@ class ImageClassifier:
             raise Exception("Image detection model is not loaded. Cannot perform prediction.")
 
         try:
-            # Open image using PIL for YOLOv8
             img = Image.open(io.BytesIO(image_bytes))
 
-            results = self.yolo_model.predict(source=img, conf=0.25, iou=0.7, imgsz=640, verbose=False)
+            results = self.yolo_model.predict(source=img, conf=0.4, iou=0.7, imgsz=640, verbose=False)
 
-            detected_dishes_info: List[DishInfo] = []
+            best_dish_info: Optional[DishInfo] = None
+            max_confidence = -1.0 
 
             for r in results:
                 boxes = r.boxes
                 if boxes is not None:
                     for box in boxes:
                         cls = int(box.cls[0].item())
-                        name = self.yolo_model.names[cls] # Get class name from model
+                        name = self.yolo_model.names[cls]
                         conf = round(box.conf[0].item(), 2)
                         x1, y1, x2, y2 = [round(x) for x in box.xyxy[0].tolist()]
 
-                        dish_details = DISH_DATABASE.get(name)
-
-                        detected_dishes_info.append(
-                            DishInfo(
+                        if conf > max_confidence:
+                            max_confidence = conf
+                            dish_details = DISH_DATABASE.get(name)
+                            best_dish_info = DishInfo(
                                 class_name=name,
                                 confidence=conf,
                                 box=[x1, y1, x2, y2],
@@ -95,20 +95,19 @@ class ImageClassifier:
                                 description=dish_details.get("description") if dish_details else None,
                                 estimated_calories=dish_details.get("estimated_calories") if dish_details else None
                             )
-                        )
             
-            if not detected_dishes_info:
+            if best_dish_info:
+                return DetectionResponse(
+                    status="success",
+                    message="Most confident dish detected.",
+                    detections=[best_dish_info] 
+                )
+            else:
                 return DetectionResponse(
                     status="success",
                     message="No known dishes detected in the image.",
                     detections=[]
                 )
-
-            return DetectionResponse(
-                status="success",
-                message="Dishes detected successfully.",
-                detections=detected_dishes_info
-            )
 
         except Exception as e:
             raise Exception(f"An error occurred during dish prediction: {e}")

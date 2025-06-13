@@ -241,7 +241,7 @@ function FitnessPlanner() {
                 session_id: sessionId,
                 user_details: userDetails
             }, {
-                responseType: 'blob', // Important for downloading files
+                responseType: 'blob',
             });
 
             const url = window.URL.createObjectURL(new Blob([response.data]));

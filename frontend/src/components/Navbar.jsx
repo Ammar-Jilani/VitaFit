@@ -10,7 +10,7 @@ function Navbar() {
       </Link>
       <ul className="nav-links">
         {/* Removed <li><Link to="/">Home</Link></li> */}
-        <li><Link to="/about">About VitaFit</Link></li>
+        <li><Link to="/about">About</Link></li>
       </ul>
     </nav>
   );

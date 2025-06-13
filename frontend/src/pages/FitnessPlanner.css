@@ -1,16 +1,13 @@
-    /* frontend/src/pages/FitnessPlanner.css */
 
-    /* General Body and HTML styling (keep as is if it's already in your global CSS or main App.css) */
     body, html {
         margin: 0;
         padding: 0;
         height: 100%;
         font-family: 'Arial', sans-serif;
         color: #ffffff;
-        background: #f0f2f5; /* Light background for body */
+        background: #f0f2f5; 
     }
 
-    /* Background for the fitness page */
     .fitness-bg {
         background: url('/Background-Image.png') center/cover no-repeat;
         height: 100vh;
@@ -41,7 +38,7 @@
     .fitness-form {
         display: flex;
         flex-direction: column;
-        gap: 1rem;
+        gap: 2rem;
         width: 100%; 
         max-width: 500px; 
     }

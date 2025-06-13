@@ -5,7 +5,6 @@ import axios from 'axios';
 import './CalorieEstimation.css';
 
 function CalorieEstimation() {
-    // Defines the base URL for backend API interactions.
     const API_BASE_URL = 'http://localhost:8000';
 
     const [loading, setLoading] = useState(false);
@@ -14,7 +13,6 @@ function CalorieEstimation() {
     const [detectionResults, setDetectionResults] = useState(null);
     const [error, setError] = useState(null);
 
-    // Cleans up the image preview URL to prevent memory leaks.
     useEffect(() => {
         return () => {
             if (imagePreviewUrl) {
@@ -23,7 +21,6 @@ function CalorieEstimation() {
         };
     }, [imagePreviewUrl]);
 
-    // Handles the image upload, sends it to the backend for analysis, and displays results.
     const handleUpload = async (e) => {
         const file = e.target.files[0];
         if (!file) {

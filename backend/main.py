@@ -2,7 +2,7 @@
 import os
 import uuid
 import datetime
-import json # Import json for stringifying MongoDB data
+import json
 from typing import Optional, Any
 from fastapi import FastAPI, HTTPException, Request, Response, UploadFile, File, Depends
 from fastapi.responses import StreamingResponse
@@ -210,25 +210,20 @@ async def classify_dish_endpoint(file: UploadFile = File(...)):
 @app.post("/ai/overview")
 async def get_ai_overview_endpoint(chat_request: ChatRequest, rag: RAGAssistant = Depends(get_rag_assistant_dependency)):
     predictions_collection = get_db_collection("predictions")
-    session_id = chat_request.session_id # Get session_id from the request
+    session_id = chat_request.session_id
 
-    # Fetch user's data from MongoDB
     user_data_record = predictions_collection.find_one({"session_id": session_id})
 
     if not user_data_record:
         raise HTTPException(status_code=404, detail=f"No fitness data found for session ID: {session_id}. Please submit your personal details and generate a plan first.")
 
-    # Format the user data for the LLM
-    # Exclude MongoDB's _id and timestamp for cleaner input to LLM
     user_data_for_llm = {
         k: v for k, v in user_data_record.items() 
         if k not in ["_id", "timestamp", "processed_features"]
     }
-    # Convert to JSON string for the LLM
     user_data_context_str = json.dumps(user_data_for_llm, indent=2)
 
     try:
-        # Pass the formatted user data as context to the RAG assistant
         response = await rag.get_initial_overview(user_data_context_str)
         return {"response": response}
     except Exception as e:
@@ -241,7 +236,7 @@ async def ai_chat_endpoint(chat_request: ChatRequest, rag: RAGAssistant = Depend
     Handles follow-up questions within the AI chat interface.
     """
     user_question = chat_request.message
-    session_id = chat_request.session_id # Session ID is also relevant for chat context if needed later
+    session_id = chat_request.session_id 
 
     try:
         response = await rag.chat_with_ai(user_question, session_id)
